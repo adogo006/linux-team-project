@@ -55,6 +55,7 @@ linux-team-project/
 ## 4. 환경 변수
 
 공통 환경 변수는 `.devcontainer/.env`에서 관리합니다.
+제가 카톡으로 드린 .env 파일을 프로젝트 /.devcontainer 안에 넣으시고 빌드하시면 됩니다.
 
 주요 DB 변수:
 
@@ -93,7 +94,7 @@ db_user = os.getenv("DB_USER")
 - `fastapi/main.py`는 템플릿 주석만 있는 초기 상태입니다.
 - 실제 엔드포인트(`GET`, `POST` 등) 구현이 필요합니다.
 
-의존성 추가:
+외부라이브러리 추가:
 
 - `.devcontainer/fastapi_env/requirements.txt`에 라이브러리 추가
 - DevContainer 재빌드
@@ -110,7 +111,7 @@ db_user = os.getenv("DB_USER")
 - `/` -> 정적 파일 제공
 - `/api/` -> `http://api:8000/`으로 프록시
 
-의존성 추가:
+외부라이브러리 추가:
 
 - `.devcontainer/nginx_env/requirements.txt` 수정
 - DevContainer 재빌드
@@ -122,6 +123,7 @@ db_user = os.getenv("DB_USER")
 - DB 컨테이너는 `postgres:16-bookworm` 사용
 - 데이터는 Docker 볼륨 `postgres-data`에 보존
 - FastAPI는 `.env` 값을 통해 DB에 연결
+- sqlalchemy를 사용한 파이썬을 통한 팀원들이 활용할 DB조작 모듈 생성에 집중(ex. 로그인용 아이디 비번 확인 모듈)
 
 ## 6. 컨테이너/Dockerfile 참고
 
@@ -138,6 +140,8 @@ db_user = os.getenv("DB_USER")
 - 기능 단위 브랜치 사용: `feature/<name>`
 - PR 설명에 변경 파일/테스트 방법 명시
 - 공통 설정 파일(`.env`, `docker-compose.yml`, `devcontainer.json`) 수정 시 팀 공지
+- 항상 빌드테스트(rebuild) 확인 후 develop 리모트에 푸쉬
+- develop에 머지하는 경우 팀원들에게 먼저 알리기.
 
 ## 8. 문제 해결 체크리스트
 
