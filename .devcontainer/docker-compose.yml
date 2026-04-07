@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-bookworm # 안정적인 Bookworm 버전 권장 이미지를 온라인에서 가져와서 사용
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    networks:
+      - linux-project-net
+    volumes:
+      - postgres-data:/var/lib/postgresql/data # 데이터 보존을 위한 볼륨
+
+  api:
+    build:
+      context: ..
+      dockerfile: .devcontainer/fastapi_env/Dockerfile
+    env_file: 
+      - .env
+    volumes:
+      - ..:/workspaces:cached
+    working_dir: /workspaces/fastapi
+    environment:
+      - PYTHONPATH=/workspaces         # 중요! /workspaces를 탐색 경로에 추가
+    networks:
+      - linux-project-net                # 내부사용자가 사용하는 net
+    depends_on:
+      - db
+    
+  nginx:
+    build:
+      context: ..
+      dockerfile: .devcontainer/nginx_env/Dockerfile 
+    env_file: 
+      - .env
+    volumes:
+      - ..:/workspaces:cached       # 전체 프로젝트 루트 공유
+    working_dir: /workspaces/nginx   # 컨테이너 시작 시 크롤러 폴더에서 시작
+    environment:
+      - PYTHONPATH=/workspaces         # 중요! /workspaces를 탐색 경로에 추가
+    networks:
+      - linux-project-net
+    depends_on:
+      - db
+  
+volumes:
+  postgres-data:
+
+networks:
+  linux-project-net:
+    driver: bridge
