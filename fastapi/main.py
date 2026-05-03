@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
         stop_scheduler()
 
 
-app = FastAPI(title="InsideViral API", lifespan=lifespan)#받기
+app = FastAPI(title="InsideViral API", lifespan=lifespan)
 
 
 async def notify_user_or_admin(request_id: str, status: str, error_message: Optional[str] = None, saved_rows: Optional[int] = None):
@@ -55,15 +55,17 @@ async def notify_user_or_admin(request_id: str, status: str, error_message: Opti
         print(f"[NOTIFY] webhook failed: {exc}")
 
 
-@app.get("/") #api엔드포인트가 /로 돌아오면 실행
+@app.get("/") #/에 주소 입력, 유저 주소 입력 시 띄울 메세지"
 def read_root():
-    return {"message": "Welcome to InsideViral API Server"}
+    return {"message": "Welcome to API server"}
 
-@app.get("/crawl/healthcheck") #요청이 이거면 이거실행
+@app.get("/crawl/healthcheck")
 async def health_check():
     endpoint = os.getenv("CRAWLER_URL") + "healthcheck" if os.getenv("CRAWLER_URL") else None
     if not endpoint:       
         raise HTTPException(status_code=500, detail="CRAWLER_URL is not configured")
+    
+    endpoint = crawler_url.rstrip("/") + "/healthcheck"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(endpoint)
@@ -77,3 +79,74 @@ async def health_check():
         "message": "crawler healthcheck ok",
         "crawler_response": response.json(),
     }
+
+#0503
+@app.post("/crawl/request")
+async def create_crawl_request(payload: CrawlRelayRequest):
+    request_id = str(uuid.uuid4())
+    crawler_url = os.getenv("CRAWLER_URL")
+
+    await api_create_request_log(
+        RequestLogUpsert(request_id=request_id, status=RequestStatus.PENDING, created_at=datetime.now(timezone.utc))
+    )
+
+    crawler_url = os.getenv("CRAWLER_URL")
+    if not crawler_url:
+        raise HTTPException(status_code=500, detail="CRAWLER_URL is not find")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                crawler_url.rstrip("/") + "/crawl",
+                json={"request_id": request_id, **payload.dict() }
+            )
+        await api_create_request_log(request_log)
+    except Exception as e:
+        await api_update_request_log(
+            request_id,
+            status=RequestStatus.FAILED,
+            error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail="crawler request failed")
+
+    return {"request_id": request_id}
+
+@app.post("/crawl/callback")
+async def crawl_callback(payload: CrawlerCallbackPayload):
+    try:
+        await api_update_request_log(
+            payload.request_id,
+            status=payload.status,
+            error_message=payload.error_message,
+        )
+
+        await notify_user_or_admin(
+            request_id=payload.request_id,
+            status=payload.status,
+            error_message=payload.error_message,
+            saved_rows=payload.saved_rows,
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"message": "callback received"}
+
+@app.get("/crawl/request/{request_id}")
+async def get_request_status(request_id: str):
+    data = await api_get_request_log(request_id)
+
+    if not data:
+        raise HTTPException(status_code=404, detail="request not found")
+
+    return data
+
+@app.get("/crawl/request/{request_id}")
+async def get_request_status(request_id: str):
+    data = await api_get_request_log(request_id)
+
+    if not data:
+        raise HTTPException(status_code=404, detail="request not found")
+
+    return data
+
