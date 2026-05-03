@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>에디터 — CodeSync</title>
+    <link rel="stylesheet" href="css/common.css" />
+    <link rel="stylesheet" href="css/editor.css" />
+  </head>
+  <body>
+    <!-- 상단 네비게이션 -->
+    <nav class="editor-nav">
+      <div class="nav-logo">CodeSync</div>
+      <span class="nav-sep">/</span>
+      <div class="nav-project-name" id="nav-project-name">프로젝트명</div>
+      <span class="nav-role-badge" id="nav-role-badge"></span>
+      <div class="nav-spacer"></div>
+      <button class="nav-back" onclick="window.location.href = 'project.html'">
+        프로젝트 목록
+      </button>
+    </nav>
+
+    <!-- 3단 레이아웃 -->
+    <div class="editor-layout">
+      <!-- 왼쪽: 사용자 목록 -->
+      <aside class="panel-users">
+        <div class="panel-header">
+          <span>멤버</span>
+          <span class="online-dot"></span>
+        </div>
+        <div class="user-list" id="user-list"></div>
+        <div class="danger-zone" id="danger-zone">
+          <button class="btn-danger" onclick="openDeleteModal()">
+            ⚠ 프로젝트 삭제
+          </button>
+        </div>
+      </aside>
+
+      <!-- 가운데: 코드 에디터 -->
+      <section class="panel-editor">
+        <div class="editor-tabs" id="editor-tabs"></div>
+        <div class="editor-toolbar" id="editor-toolbar"></div>
+        <div class="code-area" id="code-area">
+          <div class="code-empty">
+            <span class="icon">{'_'}</span>
+            <span>파일을 선택하면 코드가 표시됩니다</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 오른쪽: 파일 트리 -->
+      <aside class="panel-files">
+        <div class="files-header">
+          <span>파일</span>
+          <div class="files-actions">
+            <button class="icon-btn" onclick="addFile()" title="파일 추가">
+              +
+            </button>
+            <button class="icon-btn" onclick="addFolder()" title="폴더 추가">
+              📁
+            </button>
+          </div>
+        </div>
+        <div class="file-tree" id="file-tree"></div>
+      </aside>
+    </div>
+
+    <!-- 프로젝트 삭제 모달 (장 전용) -->
+    <div
+      class="modal-overlay"
+      id="delete-overlay"
+      onclick="handleDeleteOverlay(event)"
+    >
+      <div class="modal">
+        <div class="modal-title">⚠ 프로젝트 삭제</div>
+        <div class="modal-desc">
+          이 작업은 <strong>되돌릴 수 없습니다.</strong><br />
+          모든 파일, 코드, 멤버 정보가 영구적으로 삭제됩니다.
+        </div>
+        <div class="modal-confirm-label">
+          확인을 위해 <code>삭제</code> 를 입력하세요
+        </div>
+        <input
+          class="modal-input"
+          id="delete-input"
+          type="text"
+          placeholder="삭제"
+          autocomplete="off"
+        />
+        <div class="modal-actions">
+          <button class="btn-cancel-modal" onclick="closeDeleteModal()">
+            취소
+          </button>
+          <button
+            class="btn-delete-confirm"
+            id="btn-delete-confirm"
+            onclick="confirmDelete()"
+          >
+            영구 삭제
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/editor.js"></script>
+  </body>
+</html>

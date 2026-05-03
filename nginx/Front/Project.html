@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>프로젝트 — CodeSync</title>
+    <link rel="stylesheet" href="css/common.css" />
+    <link rel="stylesheet" href="css/project.css" />
+  </head>
+  <body>
+    <!-- 상단 네비게이션 -->
+    <nav>
+      <div class="nav-logo">CodeSync</div>
+      <div class="nav-user">
+        <div class="nav-avatar">U</div>
+        <span id="nav-username">username</span>
+      </div>
+    </nav>
+
+    <div class="layout">
+      <!-- 초대목록 사이드바 -->
+      <aside class="sidebar">
+        <div class="sidebar-title">
+          초대목록
+          <span class="invite-badge" id="invite-count">0</span>
+        </div>
+        <div id="invite-list"></div>
+      </aside>
+
+      <!-- 내 프로젝트 목록 -->
+      <main class="main">
+        <div class="main-header">
+          <div class="main-title">내 프로젝트<span>_</span></div>
+          <div class="main-count" id="project-count">0개</div>
+        </div>
+        <div class="projects-grid" id="projects-grid"></div>
+      </main>
+    </div>
+
+    <!-- 프로젝트 생성 모달 -->
+    <div
+      class="modal-overlay"
+      id="modal-overlay"
+      onclick="handleOverlayClick(event)"
+    >
+      <div class="modal">
+        <div class="modal-corner"></div>
+        <div class="modal-title">새 프로젝트<span>_</span></div>
+        <div class="modal-sub">
+          // 프로젝트를 생성하면 당신이 프로젝트 장이 됩니다
+        </div>
+
+        <label class="modal-label">프로젝트 명</label>
+        <input
+          class="modal-input"
+          id="proj-name"
+          type="text"
+          placeholder="프로젝트 이름을 입력하세요"
+          maxlength="50"
+        />
+
+        <label class="modal-label">프로젝트 설명</label>
+        <textarea
+          class="modal-textarea"
+          id="proj-desc"
+          placeholder="무엇을 하는 프로젝트인가요?"
+        ></textarea>
+
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="closeModal()">취소</button>
+          <button class="btn-create" onclick="createProject()">
+            프로젝트 생성
+          </button>
+        </div>
+        <div class="modal-status" id="modal-status"></div>
+      </div>
+    </div>
+
+    <script src="js/project.js"></script>
+  </body>
+</html>
