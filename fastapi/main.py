@@ -30,10 +30,11 @@ async def lifespan(app: FastAPI):
         stop_scheduler()
 
 
-app = FastAPI(title="InsideViral API", lifespan=lifespan)
+app = FastAPI(title="InsideViral API", lifespan=lifespan)#받기
 
 
 async def notify_user_or_admin(request_id: str, status: str, error_message: Optional[str] = None, saved_rows: Optional[int] = None):
+
     """콜백 수신 후 알림 훅. 기본은 로그 출력, 필요 시 웹훅으로 확장."""
     print(f"[NOTIFY] request_id={request_id} status={status} saved_rows={saved_rows} error={error_message}")
     webhook_url = os.getenv("ADMIN_WEBHOOK_URL")
@@ -54,11 +55,11 @@ async def notify_user_or_admin(request_id: str, status: str, error_message: Opti
         print(f"[NOTIFY] webhook failed: {exc}")
 
 
-@app.get("/")
+@app.get("/") #api엔드포인트가 /로 돌아오면 실행
 def read_root():
     return {"message": "Welcome to InsideViral API Server"}
 
-@app.get("/crawl/healthcheck")
+@app.get("/crawl/healthcheck") #요청이 이거면 이거실행
 async def health_check():
     endpoint = os.getenv("CRAWLER_URL") + "healthcheck" if os.getenv("CRAWLER_URL") else None
     if not endpoint:       
