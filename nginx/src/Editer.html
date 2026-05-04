@@ -22,18 +22,24 @@
 
     <!-- 3단 레이아웃 -->
     <div class="editor-layout">
-      <!-- 왼쪽: 사용자 목록 -->
-      <aside class="panel-users">
-        <div class="panel-header">
-          <span>멤버</span>
-          <span class="online-dot"></span>
+      <!-- 왼쪽: 파일 트리 -->
+      <aside class="panel-files">
+        <div class="files-header">
+          <span>파일</span>
+          <div class="files-actions">
+            <button class="icon-btn" onclick="addFile(null)" title="파일 추가">
+              +
+            </button>
+            <button
+              class="icon-btn"
+              onclick="addFolder(null)"
+              title="폴더 추가"
+            >
+              📁
+            </button>
+          </div>
         </div>
-        <div class="user-list" id="user-list"></div>
-        <div class="danger-zone" id="danger-zone">
-          <button class="btn-danger" onclick="openDeleteModal()">
-            ⚠ 프로젝트 삭제
-          </button>
-        </div>
+        <div class="file-tree" id="file-tree"></div>
       </aside>
 
       <!-- 가운데: 코드 에디터 -->
@@ -48,20 +54,18 @@
         </div>
       </section>
 
-      <!-- 오른쪽: 파일 트리 -->
-      <aside class="panel-files">
-        <div class="files-header">
-          <span>파일</span>
-          <div class="files-actions">
-            <button class="icon-btn" onclick="addFile()" title="파일 추가">
-              +
-            </button>
-            <button class="icon-btn" onclick="addFolder()" title="폴더 추가">
-              📁
-            </button>
-          </div>
+      <!-- 오른쪽: 사용자 목록 -->
+      <aside class="panel-users">
+        <div class="panel-header">
+          <span>멤버</span>
+          <span class="online-dot"></span>
         </div>
-        <div class="file-tree" id="file-tree"></div>
+        <div class="user-list" id="user-list"></div>
+        <div class="danger-zone" id="danger-zone">
+          <button class="btn-danger" onclick="openDeleteModal()">
+            ⚠ 프로젝트 삭제
+          </button>
+        </div>
       </aside>
     </div>
 

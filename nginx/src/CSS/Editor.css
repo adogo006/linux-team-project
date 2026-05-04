@@ -98,7 +98,7 @@ body {
 /* ── 3단 레이아웃 ── */
 .editor-layout {
   display: grid;
-  grid-template-columns: 220px 1fr 240px;
+  grid-template-columns: 240px 1fr 220px;
   flex: 1;
   overflow: hidden;
 }
@@ -107,7 +107,7 @@ body {
    왼쪽 패널 — 사용자 목록
 ══════════════════════════════ */
 .panel-users {
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -506,7 +506,7 @@ body {
    오른쪽 패널 — 파일 트리
 ══════════════════════════════ */
 .panel-files {
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -606,6 +606,28 @@ body {
 }
 .tree-item.folder .tree-icon {
   color: var(--blue);
+}
+
+/* 폴더 행 hover 시 나타나는 + 버튼 */
+.tree-add-btn {
+  opacity: 0;
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-muted);
+  padding: 0 4px;
+  border-radius: 3px;
+  line-height: 1;
+  transition:
+    opacity 0.1s,
+    background 0.1s,
+    color 0.1s;
+}
+.tree-item.folder:hover .tree-add-btn {
+  opacity: 1;
+}
+.tree-add-btn:hover {
+  background: var(--surface2);
+  color: var(--green);
 }
 
 .tree-icon {

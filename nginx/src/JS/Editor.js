@@ -218,7 +218,7 @@ function renderNav() {
 
   const badge = document.getElementById("nav-role-badge");
   const roleMap = {
-    owner: ["프로젝트 장", "owner"],
+    owner: ["프로젝트장", "owner"],
     leader: ["팀장", "leader"],
     member: ["일반", "member"],
   };
@@ -242,7 +242,7 @@ function renderUsers() {
   sorted.forEach((m) => groups[m.role].push(m));
 
   const groupMeta = {
-    owner: { label: "프로젝트 장", show: true },
+    owner: { label: "프로젝트장", show: true },
     leader: { label: "팀장", show: groups.leader.length > 0 },
     member: { label: "일반", show: groups.member.length > 0 },
   };
@@ -281,23 +281,30 @@ function renderUsers() {
 // ── 파일 트리 ────────────────────────────────────────────────
 function renderFileTree() {
   const tree = document.getElementById("file-tree");
-  tree.innerHTML = buildTreeHTML(fileTree, 0);
+  tree.innerHTML = buildTreeHTML(fileTree, 0, "");
 }
 
-function buildTreeHTML(nodes, depth) {
+function buildTreeHTML(nodes, depth, parentPath) {
   let html = "";
   const indent = depth > 0 ? `indent-${Math.min(depth, 3)}` : "";
 
   for (const node of nodes) {
+    const nodePath = parentPath ? `${parentPath}::${node.name}` : node.name;
+    const safeId = nodePath.replace(/[^a-zA-Z0-9가-힣_\-]/g, "_");
+
     if (node.type === "folder") {
       const arrow = node.open ? "▾" : "▸";
       html += `
-        <div class="tree-item folder ${indent}" onclick="toggleFolder(this, '${node.name}')">
+        <div class="tree-item folder ${indent}" id="folder-${safeId}"
+             onclick="toggleFolder('${nodePath}')">
           <span class="tree-icon">${arrow}</span>
           <span class="tree-name">${escHtml(node.name)}</span>
+          <span class="tree-add-btn"
+                onclick="event.stopPropagation(); openTreeCtx(event, '${nodePath}')"
+                title="이 폴더에 추가">+</span>
         </div>`;
       if (node.open && node.children) {
-        html += buildTreeHTML(node.children, depth + 1);
+        html += buildTreeHTML(node.children, depth + 1, nodePath);
       }
     } else {
       const ext = node.name.split(".").pop();
@@ -307,7 +314,7 @@ function buildTreeHTML(nodes, depth) {
         : "";
       html += `
         <div class="tree-item file ${indent} ${activeFile?.name === node.name ? "active" : ""}"
-             onclick="openFile(${JSON.stringify(node.name)})">
+             onclick="openFile('${escHtml(node.name)}')">
           <span class="tree-icon">${icon}</span>
           <span class="tree-name">${escHtml(node.name)}</span>
           ${editTag}
@@ -317,12 +324,46 @@ function buildTreeHTML(nodes, depth) {
   return html;
 }
 
-function toggleFolder(el, name) {
-  const node = findNode(fileTree, name, "folder");
+// path = 'src::auth' 같은 :: 구분자 경로로 폴더 노드 탐색
+function findNodeByPath(path) {
+  const parts = path.split("::");
+  let nodes = fileTree;
+  let node = null;
+  for (const part of parts) {
+    node = nodes.find((n) => n.name === part);
+    if (!node) return null;
+    if (node.children) nodes = node.children;
+  }
+  return node;
+}
+
+function toggleFolder(path) {
+  const node = findNodeByPath(path);
   if (node) {
     node.open = !node.open;
     renderFileTree();
   }
+}
+
+// 폴더의 + 버튼 → 컨텍스트 메뉴
+function openTreeCtx(e, folderPath) {
+  e.stopPropagation();
+  closeCtxMenu();
+
+  const menu = document.createElement("div");
+  menu.className = "ctx-menu";
+  menu.id = "ctx-menu";
+  menu.innerHTML = `
+    <div class="ctx-item" onclick="addFile('${folderPath}'); closeCtxMenu()">📄 파일 추가</div>
+    <div class="ctx-item" onclick="addFolder('${folderPath}'); closeCtxMenu()">📁 폴더 추가</div>
+  `;
+  menu.style.top = e.clientY + "px";
+  menu.style.left = e.clientX + "px";
+  document.body.appendChild(menu);
+  setTimeout(
+    () => document.addEventListener("click", closeCtxMenu, { once: true }),
+    0,
+  );
 }
 
 function findNode(nodes, name, type) {
@@ -540,27 +581,48 @@ function toggleAccess(username) {
 }
 
 // ── 파일/폴더 추가 ───────────────────────────────────────────
-function addFile() {
+// folderPath: null → 루트에 추가 / 'src::auth' → 해당 폴더 하위에 추가
+function addFile(folderPath) {
   const name = prompt("파일 이름을 입력하세요 (예: MyClass.java)");
   if (!name || !name.trim()) return;
-  fileTree.push({
+  const newNode = {
     type: "file",
     name: name.trim(),
     editingBy: null,
     access: [currentUser.username],
-  });
+  };
+
+  if (!folderPath) {
+    fileTree.push(newNode);
+  } else {
+    const folder = findNodeByPath(folderPath);
+    if (folder && folder.type === "folder") {
+      folder.children.push(newNode);
+      folder.open = true;
+    }
+  }
   renderFileTree();
 }
 
-function addFolder() {
+function addFolder(folderPath) {
   const name = prompt("폴더 이름을 입력하세요");
   if (!name || !name.trim()) return;
-  fileTree.push({
+  const newNode = {
     type: "folder",
     name: name.trim(),
     open: true,
     children: [],
-  });
+  };
+
+  if (!folderPath) {
+    fileTree.push(newNode);
+  } else {
+    const folder = findNodeByPath(folderPath);
+    if (folder && folder.type === "folder") {
+      folder.children.push(newNode);
+      folder.open = true;
+    }
+  }
   renderFileTree();
 }
 
