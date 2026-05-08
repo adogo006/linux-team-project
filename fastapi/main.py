@@ -2,10 +2,11 @@
 # db_manager/crud 이용해서 데이터를 가져오거나 저장하는 작업도 여기서 처리
 # 비동기로 작성해야 요청을 효율적으로 처리할 수 있습니다. (async def, await 등 사용)
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
+from jose import jwt, JWTError
 
 import os
 import uuid
@@ -13,13 +14,17 @@ import httpx
 from pydantic import ValidationError
 from uuid import UUID
 
-from schemas import CrawlRelayRequest, CrawlerCallbackPayload, RequestLogUpsert
+from schemas import CrawlRelayRequest, CrawlerCallbackPayload, RequestLogUpsert, RegisterRequest,LoginRequest, ProjectCreateRequest, ProjectListRequest, ProjectOpenRequest
 from DB_manager.models import RequestStatus
 from api_crud import api_create_request_log, api_get_request_log, api_update_request_log
 from DB_manager.database import SessionLocal, engine
 from DB_manager import models
 from scheduler_runtime import start_scheduler, stop_scheduler
 
+#crud부르기
+from DB_manager import crud
+
+from scheduler_runtime import start_scheduler, stop_scheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,7 +65,7 @@ def read_root():
     return {"message": "Welcome to API server"}
 
 
-#크롤링 서버 확인
+#crawl 서버 확인
 @app.get("/crawl/healthcheck")
 async def health_check():
     endpoint = os.getenv("CRAWLER_URL") + "healthcheck" if os.getenv("CRAWLER_URL") else None
@@ -82,7 +87,7 @@ async def health_check():
         "crawler_response": response.json(),
     }
 
-#크롤링 작업 요청
+#crawling 작업 요청
 @app.post("/crawl/request")
 async def create_crawl_request(payload: CrawlRelayRequest):
     request_id = str(uuid.uuid4())
@@ -113,7 +118,7 @@ async def create_crawl_request(payload: CrawlRelayRequest):
 
     return {"request_id": request_id}
 
-#크롤링 상태 콜백
+#crawl 상태 콜백
 @app.post("/crawl/callback")
 async def crawl_callback(payload: CrawlerCallbackPayload):
     try:
@@ -141,7 +146,7 @@ async def get_request_status(request_id: str):
     data = await api_get_request_log(request_id)
 
     if not data:
-        raise HTTPException(status_code=404, detail="request not found")
+        raise HTTPException(status_code=404, detail="요청을 처리할 수 없습니다.")
 
     return data
 
@@ -168,7 +173,7 @@ def request_register(payload: RegisterRequest):
 
         return {
             "success": True,
-            "message": "회원가입 성공",
+            "message": "회원가입에 성공하셨습니다.",
             "user": {
                 "user_id": new_user.user_id,
                 "nickname": new_user.nickname,
@@ -187,10 +192,18 @@ def request_login(payload: LoginRequest):
         user = crud.get_user_by_user_id(db, payload.user_id)
 
         if not user:
-            raise HTTPException(status_code=404, detail="존재하지 않는 아이디입니다.")
+            return {
+                "success": False,
+                "message": "존재하지 않는 아이디입니다.",
+                "access_token": None,
+            }
 
         if user.password != payload.password:
-            raise HTTPException(status_code=401, detail="비밀번호가 일치하지 않습니다.")
+            return {
+                "success": False,
+                "message": "비밀번호가 일치하지 않습니다.",
+                "access_token": None,
+            }
 
         access_token = create_access_token(
             {
@@ -201,7 +214,7 @@ def request_login(payload: LoginRequest):
 
         return {
             "success": True,
-            "message": "로그인 성공",
+            "message": "로그인하셨습니다.",
             "nickname": user.nickname,
             "access_token": access_token,
             "token_type": "bearer",
@@ -209,6 +222,45 @@ def request_login(payload: LoginRequest):
 
     finally:
         db.close()
+
+#세션용 토큰 유지
+
+@app.post("/api/request_refresh")
+def request_refresh(authorization: str | None = Header(None)):
+    token = get_token_from_header(authorization)
+    payload = verify_access_token(token)
+
+    new_access_token = create_access_token(
+        {
+            "user_id": payload.get("user_id"),
+            "nickname": payload.get("nickname"),
+        }
+    )
+
+    return {
+        "success": True,
+        "message": "토큰 갱신 성공",
+        "access_token": new_access_token,
+        "token_type": "bearer",
+    }
+
+
+#토큰 만료 및 유지 기능 로그아웃
+
+@app.post("/api/request_logout")
+def request_logout(authorization: str | None = Header(None)):
+    token = get_token_from_header(authorization)
+    verify_access_token(token)
+
+    expired_tokens.add(token)
+
+    return {
+        "success": True,
+        "message": "로그아웃 성공",
+    }
+
+
+
 
 #새 프로젝트 생성
 @app.post("/api:800/request_project_create")
@@ -244,7 +296,7 @@ def request_project_create(payload: ProjectCreateRequest):
 
         return {
             "success": True,
-            "message": "프로젝트 생성 성공",
+            "message": "프로젝트 생성 완료",
             "project": {
                 "project_id": project.id,
                 "project_name": project.project_name,
@@ -325,5 +377,20 @@ def request_project_open(payload: ProjectOpenRequest):
             "editing_users": [],
         }
 
+    finally:
+        db.close()
+
+
+def create_access_token(data: dict):
+    expire = datetime.utcnow() + timedelta(hours=3)
+    token_data = data.copy()
+    token_data.update({"exp": expire})
+    return jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
     finally:
         db.close()
