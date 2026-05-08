@@ -146,7 +146,7 @@ async def get_request_status(request_id: str):
     return data
 
 #회원가입 등록 및 중복확인
-@app.post("/request_register")
+@app.post("/api:8000/request_register")
 def request_register(payload: RegisterRequest):
     db = SessionLocal()
 
@@ -178,3 +178,152 @@ def request_register(payload: RegisterRequest):
     finally:
         db.close()
 
+#로그인 요청 받기
+@app.post("/api:8000/request_login")
+def request_login(payload: LoginRequest):
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, payload.user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="존재하지 않는 아이디입니다.")
+
+        if user.password != payload.password:
+            raise HTTPException(status_code=401, detail="비밀번호가 일치하지 않습니다.")
+
+        access_token = create_access_token(
+            {
+                "user_id": user.user_id,
+                "nickname": user.nickname,
+            }
+        )
+
+        return {
+            "success": True,
+            "message": "로그인 성공",
+            "nickname": user.nickname,
+            "access_token": access_token,
+            "token_type": "bearer",
+        }
+
+    finally:
+        db.close()
+
+#새 프로젝트 생성
+@app.post("/api:800/request_project_create")
+def request_project_create(payload: ProjectCreateRequest):
+    db = SessionLocal()
+
+    try:
+        owner = crud.get_user_by_nickname(db, payload.owner_nickname)
+
+        if not owner:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        project = crud.create_project(
+            db=db,
+            project_name=payload.project_name,
+            owner_id=owner.id,
+        )
+
+        crud.add_project_member(
+            db=db,
+            project_id=project.id,
+            user_id=owner.id,
+            role="owner",
+        )
+
+        crud.create_project_log(
+            db=db,
+            project_id=project.id,
+            nickname=owner.nickname,
+            action="PROJECT_CREATE",
+            message=f"{owner.nickname}님이 프로젝트를 생성했습니다.",
+        )
+
+        return {
+            "success": True,
+            "message": "프로젝트 생성 성공",
+            "project": {
+                "project_id": project.id,
+                "project_name": project.project_name,
+                "owner_nickname": owner.nickname,
+            },
+        }
+
+    finally:
+        db.close()
+
+
+#사용자 참여 API불러오기
+@app.post("/api:800/request_project_list")
+def request_project_list(payload: ProjectListRequest):
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_nickname(db, payload.nickname)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        projects = crud.get_projects_by_user_id(db, user.id)
+
+        return {
+            "success": True,
+            "message": "프로젝트 목록 조회 성공",
+            "projects": [
+                {
+                    "project_id": project.id,
+                    "project_name": project.project_name,
+                    "owner_id": project.owner_id,
+                }
+                for project in projects
+            ],
+        }
+
+    finally:
+        db.close()
+
+#프로젝트 오픈
+@app.post("/api:800/request_project_open")
+def request_project_open(payload: ProjectOpenRequest):
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_nickname(db, payload.nickname)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        project = crud.get_project_by_id(db, payload.project_id)
+
+        if not project:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+
+        file_tree = crud.get_project_file_tree(db, payload.project_id)
+        logs = crud.get_project_logs(db, payload.project_id)
+
+        return {
+            "success": True,
+            "message": "프로젝트 열기 성공",
+            "project": {
+                "project_id": project.id,
+                "project_name": project.project_name,
+            },
+            "file_tree": file_tree,
+            "logs": logs,
+            "editing_users": [],
+        }
+
+    finally:
+        db.close()
