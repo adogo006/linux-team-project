@@ -290,7 +290,7 @@ def request_login(payload: LoginRequest):
 
 #세션용 토큰 유지
 
-@app.post("/api/request_refresh")
+@app.post("/api:800/request_refresh")
 def request_refresh(authorization: str | None = Header(None)):
     token = get_token_from_header(authorization)
     payload = verify_access_token(token)
@@ -312,7 +312,7 @@ def request_refresh(authorization: str | None = Header(None)):
 
 #토큰 만료 및 유지 기능 로그아웃
 
-@app.post("/api/request_logout")
+@app.post("/api:800/request_logout")
 def request_logout(authorization: str | None = Header(None)):
     token = get_token_from_header(authorization)
     verify_access_token(token)
