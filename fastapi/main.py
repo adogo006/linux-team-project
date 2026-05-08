@@ -2,7 +2,7 @@
 # db_manager/crud 이용해서 데이터를 가져오거나 저장하는 작업도 여기서 처리
 # 비동기로 작성해야 요청을 효율적으로 처리할 수 있습니다. (async def, await 등 사용)
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Depends
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
@@ -11,16 +11,25 @@ from jose import jwt, JWTError
 import os
 import uuid
 import httpx
-from pydantic import ValidationError
-from uuid import UUID
+#from pydantic import ValidationError
+#from uuid import UUID
 
-from schemas import CrawlRelayRequest, CrawlerCallbackPayload, RequestLogUpsert, RegisterRequest,LoginRequest, ProjectCreateRequest, ProjectListRequest, ProjectOpenRequest
+from schemas import CrawlRelayRequest, CrawlerCallbackPayload, RequestLogUpsert, RegisterRequest, LoginRequest, ProjectCreateRequest, ProjectListRequest, ProjectOpenRequest
 from DB_manager.models import RequestStatus
 from api_crud import api_create_request_log, api_get_request_log, api_update_request_log
 from DB_manager.database import SessionLocal, engine
 from DB_manager import models
+from DB_manager.db_handler import engine
 from scheduler_runtime import start_scheduler, stop_scheduler
 
+
+SECRET_KEY = os.getenv("SECRET_KEY", "temporary-secret-key")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+expired_tokens = set()
+
+#############
 #crud부르기
 from DB_manager import crud
 
@@ -64,7 +73,7 @@ async def notify_user_or_admin(request_id: str, status: str, error_message: Opti
 def read_root():
     return {"message": "Welcome to API server"}
 
-
+#################
 #crawl 서버 확인
 @app.get("/crawl/healthcheck")
 async def health_check():
@@ -87,37 +96,78 @@ async def health_check():
         "crawler_response": response.json(),
     }
 
+##################
 #crawling 작업 요청
 @app.post("/crawl/request")
 async def create_crawl_request(payload: CrawlRelayRequest):
     request_id = str(uuid.uuid4())
     crawler_url = os.getenv("CRAWLER_URL")
+    now = datetime.now(timezone.utc)
 
     await api_create_request_log(
-        RequestLogUpsert(request_id=request_id, status=RequestStatus.PENDING, created_at=datetime.now(timezone.utc))
+        RequestLogUpsert(
+            request_id=request_id,
+            status=RequestStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+        )
     )
 
-    crawler_url = os.getenv("CRAWLER_URL")
     if not crawler_url:
-        raise HTTPException(status_code=500, detail="CRAWLER_URL is not find")
-
-    try:
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                crawler_url.rstrip("/") + "/crawl",
-                json={"request_id": request_id, **payload.dict() }
-            )
-        await api_create_request_log(request_log)
-    except Exception as e:
         await api_update_request_log(
             request_id,
             status=RequestStatus.FAILED,
-            error_message=str(e)
+            error_message="CRAWLER_URL is not configured",
         )
+
+        raise HTTPException(status_code=500, detail="CRAWLER_URL is not configured")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                crawler_url.rstrip("/") + "/crawl",
+                json={
+                    "request_id": request_id,
+                    **payload_to_dict(payload),
+                },
+            )
+            response.raise_for_status()
+
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text if exc.response is not None else "crawler error"
+
+        await api_update_request_log(
+            request_id,
+            status=RequestStatus.FAILED,
+            error_message=detail,
+        )
+
+        raise HTTPException(status_code=502, detail=f"crawler request failed: {detail}")
+
+    except httpx.RequestError as exc:
+        await api_update_request_log(
+            request_id,
+            status=RequestStatus.FAILED,
+            error_message=str(exc),
+        )
+
+        raise HTTPException(status_code=503, detail=f"crawler unavailable: {exc}")
+
+    except Exception as exc:
+        await api_update_request_log(
+            request_id,
+            status=RequestStatus.FAILED,
+            error_message=str(exc),
+        )
+
         raise HTTPException(status_code=500, detail="crawler request failed")
 
-    return {"request_id": request_id}
+    return {
+        "message": "crawl request created",
+        "request_id": request_id,
+    }
 
+##############
 #crawl 상태 콜백
 @app.post("/crawl/callback")
 async def crawl_callback(payload: CrawlerCallbackPayload):
@@ -140,6 +190,8 @@ async def crawl_callback(payload: CrawlerCallbackPayload):
 
     return {"message": "callback received"}
 
+
+#############################
 #회원가입 요청 처리 - id 입력
 @app.get("/crawl/request/{request_id}")
 async def get_request_status(request_id: str):
@@ -150,14 +202,16 @@ async def get_request_status(request_id: str):
 
     return data
 
-#회원가입 등록 및 중복확인
+
+########################
+##회원가입 등록 및 중복확인
 @app.post("/api:8000/request_register")
 def request_register(payload: RegisterRequest):
     db = SessionLocal()
 
     try:
         existing_user = crud.get_user_by_user_id(db, payload.user_id)
-        if existing_user:
+        if existing_user: #리턴값이 400 bad Request라는데 만약 TrueFalse를 프런트가 받는다면 수정필요.
             raise HTTPException(status_code=400, detail="이미 존재하는 아이디입니다.")
 
         existing_nickname = crud.get_user_by_nickname(db, payload.nickname)
@@ -183,6 +237,15 @@ def request_register(payload: RegisterRequest):
     finally:
         db.close()
 
+
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+
 #로그인 요청 받기
 @app.post("/api:8000/request_login")
 def request_login(payload: LoginRequest):
@@ -196,6 +259,7 @@ def request_login(payload: LoginRequest):
                 "success": False,
                 "message": "존재하지 않는 아이디입니다.",
                 "access_token": None,
+                "token_type": None,
             }
 
         if user.password != payload.password:
@@ -203,6 +267,7 @@ def request_login(payload: LoginRequest):
                 "success": False,
                 "message": "비밀번호가 일치하지 않습니다.",
                 "access_token": None,
+                "token_type": None,
             }
 
         access_token = create_access_token(
@@ -256,7 +321,7 @@ def request_logout(authorization: str | None = Header(None)):
 
     return {
         "success": True,
-        "message": "로그아웃 성공",
+        "message": "로그아웃하셨습니다.",
     }
 
 
@@ -381,13 +446,7 @@ def request_project_open(payload: ProjectOpenRequest):
         db.close()
 
 
-def create_access_token(data: dict):
-    expire = datetime.utcnow() + timedelta(hours=3)
-    token_data = data.copy()
-    token_data.update({"exp": expire})
-    return jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
-
-
+#토큰 만료 및 유지 기능
 def get_db():
     db = SessionLocal()
     try:
