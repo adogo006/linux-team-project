@@ -55,10 +55,12 @@ async def notify_user_or_admin(request_id: str, status: str, error_message: Opti
         print(f"[NOTIFY] webhook failed: {exc}")
 
 
-@app.get("/") #/에 주소 입력, 유저 주소 입력 시 띄울 메세지"
+@app.get("/")
 def read_root():
     return {"message": "Welcome to API server"}
 
+
+#크롤링 서버 확인
 @app.get("/crawl/healthcheck")
 async def health_check():
     endpoint = os.getenv("CRAWLER_URL") + "healthcheck" if os.getenv("CRAWLER_URL") else None
@@ -80,7 +82,7 @@ async def health_check():
         "crawler_response": response.json(),
     }
 
-#0503
+#크롤링 작업 요청
 @app.post("/crawl/request")
 async def create_crawl_request(payload: CrawlRelayRequest):
     request_id = str(uuid.uuid4())
@@ -111,6 +113,7 @@ async def create_crawl_request(payload: CrawlRelayRequest):
 
     return {"request_id": request_id}
 
+#크롤링 상태 콜백
 @app.post("/crawl/callback")
 async def crawl_callback(payload: CrawlerCallbackPayload):
     try:
@@ -132,6 +135,7 @@ async def crawl_callback(payload: CrawlerCallbackPayload):
 
     return {"message": "callback received"}
 
+#회원가입 요청 처리 - id 입력
 @app.get("/crawl/request/{request_id}")
 async def get_request_status(request_id: str):
     data = await api_get_request_log(request_id)
@@ -141,12 +145,36 @@ async def get_request_status(request_id: str):
 
     return data
 
-@app.get("/crawl/request/{request_id}")
-async def get_request_status(request_id: str):
-    data = await api_get_request_log(request_id)
+#회원가입 등록 및 중복확인
+@app.post("/request_register")
+def request_register(payload: RegisterRequest):
+    db = SessionLocal()
 
-    if not data:
-        raise HTTPException(status_code=404, detail="request not found")
+    try:
+        existing_user = crud.get_user_by_user_id(db, payload.user_id)
+        if existing_user:
+            raise HTTPException(status_code=400, detail="이미 존재하는 아이디입니다.")
 
-    return data
+        existing_nickname = crud.get_user_by_nickname(db, payload.nickname)
+        if existing_nickname:
+            raise HTTPException(status_code=400, detail="이미 존재하는 닉네임입니다.")
+
+        new_user = crud.create_user(
+            db=db,
+            user_id=payload.user_id,
+            password=payload.password,
+            nickname=payload.nickname,
+        )
+
+        return {
+            "success": True,
+            "message": "회원가입 성공",
+            "user": {
+                "user_id": new_user.user_id,
+                "nickname": new_user.nickname,
+            },
+        }
+
+    finally:
+        db.close()
 
