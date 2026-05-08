@@ -290,7 +290,7 @@ def request_login(payload: LoginRequest):
 
 #세션용 토큰 유지
 
-@app.post("/api:800/request_refresh")
+@app.post("/api:8000/request_refresh")
 def request_refresh(authorization: str | None = Header(None)):
     token = get_token_from_header(authorization)
     payload = verify_access_token(token)
@@ -312,7 +312,7 @@ def request_refresh(authorization: str | None = Header(None)):
 
 #토큰 만료 및 유지 기능 로그아웃
 
-@app.post("/api:800/request_logout")
+@app.post("/api:8000/request_logout")
 def request_logout(authorization: str | None = Header(None)):
     token = get_token_from_header(authorization)
     verify_access_token(token)
@@ -328,7 +328,7 @@ def request_logout(authorization: str | None = Header(None)):
 
 
 #새 프로젝트 생성
-@app.post("/api:800/request_project_create")
+@app.post("/api:8000/request_project_create")
 def request_project_create(payload: ProjectCreateRequest):
     db = SessionLocal()
 
@@ -374,7 +374,7 @@ def request_project_create(payload: ProjectCreateRequest):
 
 
 #사용자 참여 API불러오기
-@app.post("/api:800/request_project_list")
+@app.post("/api:8000/request_project_list")
 def request_project_list(payload: ProjectListRequest):
     db = SessionLocal()
 
@@ -403,7 +403,7 @@ def request_project_list(payload: ProjectListRequest):
         db.close()
 
 #프로젝트 오픈
-@app.post("/api:800/request_project_open")
+@app.post("/api:8000/request_project_open")
 def request_project_open(payload: ProjectOpenRequest):
     db = SessionLocal()
 
