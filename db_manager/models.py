@@ -1,1 +1,114 @@
 # 테이블로 만들 db 모델 정의
+
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Enum
+from sqlalchemy.orm import relationship
+import datetime
+import enum
+import uuid
+
+# database.py에서 Base 객체를 가져옴
+from .db_handler import Base
+
+# ==========================================
+# 0. 공통 함수 & Enum
+# ==========================================
+def generate_uuid():
+    return str(uuid.uuid4())
+
+class NodeType(str, enum.Enum):
+    FILE = "file"
+    DIRECTORY = "directory"
+
+# ==========================================
+# 1. 계정 정보 (users)P
+# ==========================================
+class User(Base):
+    __tablename__ = "users"
+
+    # schemas.py의 id(아이디)와 혼동을 피하기 위해 uid로 사용하거나,
+    # DB 고유 ID 자체를 문자열 UUID로 사용.
+    id = Column(String, primary_key=True, default=generate_uuid, index=True)
+    username = Column(String(20), unique=True, index=True, nullable=False) # 로그인 아이디 (schemas.RequestRegister.id)
+    password_hash = Column(String, nullable=False)
+    nickname = Column(String(12), unique=True, index=True, nullable=False) # 닉네임 (schemas.RequestRegister.nick_name)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # 역참조
+    owned_projects = relationship("Project", back_populates="creator")
+    memberships = relationship("ProjectMember", back_populates="user")
+    logs = relationship("ProjectLog", back_populates="user")
+
+# ==========================================
+# 2. 프로젝트 정보 (projects)
+# ==========================================
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(String, primary_key=True, default=generate_uuid, index=True) # project_id
+    name = Column(String(30), nullable=False)                                # project_name
+    creator_id = Column(String, ForeignKey("users.id"), nullable=False)      # 생성자
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # 역참조
+    creator = relationship("User", back_populates="owned_projects")
+    members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
+    nodes = relationship("FileNode", back_populates="project", cascade="all, delete-orphan")
+    logs = relationship("ProjectLog", back_populates="project", cascade="all, delete-orphan")
+
+# ==========================================
+# 3. 프로젝트 초대/권한 (project_members)
+# ==========================================
+class ProjectMember(Base):
+    __tablename__ = "project_members"
+
+    id = Column(String, primary_key=True, default=generate_uuid, index=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, default="member") # 권한
+    joined_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="members")
+    user = relationship("User", back_populates="memberships")
+
+# ==========================================
+# 4. 파일/디렉토리 구조 (file_nodes)
+# ==========================================
+class FileNode(Base):
+    __tablename__ = "file_nodes"
+
+    id = Column(String, primary_key=True, default=generate_uuid, index=True) # file_id 또는 directory_id
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    parent_id = Column(String, ForeignKey("file_nodes.id", ondelete="CASCADE"), nullable=True) # 상위 폴더
+    
+    name = Column(String, nullable=False)
+    node_type = Column(Enum(NodeType), nullable=False) # file or directory
+    content = Column(Text, nullable=True)              # 파일 내용 (디렉토리면 null)
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="nodes")
+    # 트리 구조 형성을 위한 자기 참조
+    children = relationship("FileNode", backref="parent", remote_side=[id], cascade="all, delete-orphan")
+
+# ==========================================
+# 5. 수정 히스토리/로그 (project_logs)
+# ==========================================
+class ProjectLog(Base):
+    __tablename__ = "project_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid, index=True) # log_id
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    # 파일이나 디렉토리에 대한 로그 (schemas.LogModel 참고)
+    target_node_id = Column(String, ForeignKey("file_nodes.id", ondelete="SET NULL"), nullable=True) 
+    
+    action_type = Column(String, nullable=False)                  # 생성, 수정, 삭제 등
+    message = Column(Text, nullable=False)                        # log_message
+    
+    start_time = Column(DateTime, nullable=True)                  # 수정 시작 시간
+    end_time = Column(DateTime, default=datetime.datetime.utcnow) # 수정 완료 시간
+
+    project = relationship("Project", back_populates="logs")
+    user = relationship("User", back_populates="logs")

@@ -30,18 +30,28 @@ class RequestRegister(BaseModel):
     password: str = Field(..., min_length=8, description="사용자 비밀번호 (최소 8자)")
     nick_name: str = Field(..., min_length=2, max_length=12, description="사용자 닉네임 (2~12자)")
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> feature/db-setup
 class RequestLogin(BaseModel):
     id: str = Field(..., description="사용자 아이디")
     password: str = Field(..., description="사용자 비밀번호")
 
 class ResponseLogin(BaseModel):
+<<<<<<< HEAD
     success: bool = Field(..., description="로그인 성공 여부")
     message: str = Field(..., description="로그인 결과 메시지")
+=======
+>>>>>>> feature/db-setup
     access_token: str = Field(..., description="JWT 액세스 토큰")
     token_type: str = Field("bearer", description="토큰 타입")
     nick_name: str = Field(..., description="사용자 닉네임")
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> feature/db-setup
 # ==========================================
 # 2. 프로젝트 관리 스키마
 # ==========================================
