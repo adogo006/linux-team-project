@@ -43,11 +43,6 @@ class RequestProjectInvite(BaseModel):
 class RequestProjectOpen(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
 
-
-class RequestProjectList(BaseModel):
-    nickname: str = Field(..., description="프로젝트 목록을 조회할 사용자 닉네임")
-
-
 class DirectoryNode(BaseModel):
     name: str
     node_type: str
@@ -65,28 +60,33 @@ class ProjectModel(BaseModel):
     creator: str
     invited_users: List[str]
 
-class ResponseProjectList(BaseModel):
-    projects: List[ProjectModel]
-
-
 # ==========================================
 # 3. 파일 및 디렉토리 관리 스키마
 # ==========================================
 
+class RequestFileCreate(BaseModel):
+    project_id: str = Field(..., description="프로젝트 고유 ID")
+    file_name: str = Field(..., min_length=1, max_length=100, description="파일 이름")
+    parent_node_id: str = Field(..., description="부모 노드 ID")
+
 class RequestFileOpen(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
-    file_path: str = Field(..., description="파일 경로 (인덱스 포인터)")
-    user_nickname: str = Field(..., description="파일을 열려는 사용자 닉네임")
+    file_uid: str = Field(..., description="파일 고유 ID")
+
+class RequestDirectoryCreate(BaseModel):
+    project_id: str = Field(..., description="프로젝트 고유 ID")
+    directory_name: str = Field(..., min_length=1, max_length=100, description="디렉토리 이름")
+    parent_node_id: Optional[str] = Field(None, description="부모 노드 ID (루트 디렉토리인 경우 None)")
 
 class RequestFileSave(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
-    file_path: str = Field(..., description="파일 경로 (인덱스 포인터)")
+    file_uid: str = Field(..., description="파일 고유 ID")
     content: str = Field(..., description="저장할 파일 내용")
     user_nickname: str = Field(..., description="저장하는 사용자 닉네임")
 
 class RequestFileAction(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
-    file_path: str = Field(..., description="파일 경로")
+    file_uid: str = Field(..., description="파일 고유 ID")
     user_nickname: str = Field(..., description="요청하는 사용자 닉네임")
 
 class RequestFileRename(BaseModel):

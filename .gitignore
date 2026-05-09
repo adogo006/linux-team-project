@@ -11,4 +11,6 @@ __pycache__/
 venv/
 
 # 개인 에디터 설정
-.vscode/            
+.vscode/            '
+
+프로젝트.md

@@ -217,7 +217,7 @@ def request_project_create(payload: schemas.RequestProjectCreate, authorization:
     finally:
         db.close()
 
-#프로젝트 오픈
+#프로젝트 열기
 @app.post("/api:8000/request_project_open")
 def request_project_open(payload: schemas.RequestProjectOpen, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
@@ -278,11 +278,162 @@ def request_project_open(payload: schemas.RequestProjectOpen, authorization: str
     finally:
         db.close()
 
+#파일 생성
+@app.post("/api:8000/request_file_create")
+def request_file_create(payload: schemas.RequestFileCreate, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
 
-#토큰 만료 및 유지 기능
-def get_db():
     db = SessionLocal()
+
     try:
-        yield db
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        # user_uploads 폴더에 데이터 파일 생성
+
+        new_file = crud.create_file_node(
+            db=db,
+            project_id=payload.project_id,
+            name=payload.file_name,
+            node_type=crud.models.NodeType.FILE,
+            parent_id=payload.parent_node_id,
+        )
+
+        crud.create_project_log(
+            db=db,
+            project_id=payload.project_id,
+            nickname=user.nickname,
+            action="FILE_CREATE",
+            message=f"{user.nickname}님이 파일 '{new_file.display_name}'을 생성했습니다.",
+            target_node_id=new_file.uid
+        )
+
+        return {
+            "success": True,
+            "message": "파일 생성 성공",
+            "file": {
+                "file_id": new_file.uid,
+                "file_name": new_file.display_name,
+                "parent_node_id": new_file.parent_uid,
+                "node_type": new_file.node_type.value if hasattr(new_file.node_type, "value") else str(new_file.node_type),
+                "file_path": new_file.file_path,
+            },
+        }
+
+    finally:
+        db.close()
+
+#디렉토리 생성
+@app.post("/api:8000/request_directory_create")
+def request_directory_create(payload: schemas.RequestDirectoryCreate, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        new_directory = crud.create_file_node(
+            db=db,
+            project_id=payload.project_id,
+            name=payload.directory_name,
+            node_type=crud.models.NodeType.DIRECTORY,
+            parent_id=payload.parent_node_id,
+        )
+
+        crud.create_project_log(
+            db=db,
+            project_id=payload.project_id,
+            nickname=user.nickname,
+            action="DIRECTORY_CREATE",
+            message=f"{user.nickname}님이 디렉토리 '{new_directory.display_name}'을 생성했습니다.",
+            target_node_id=new_directory.uid
+        )
+
+        return {
+            "success": True,
+            "message": "디렉토리 생성 성공",
+            "directory": {
+                "directory_id": new_directory.uid,
+                "directory_name": new_directory.display_name,
+                "parent_node_id": new_directory.parent_uid,
+                "node_type": new_directory.node_type.value if hasattr(new_directory.node_type, "value") else str(new_directory.node_type),
+                "file_path": new_directory.file_path,
+            },
+        }
+    finally:
+        db.close()
+    
+#파일 열기
+@app.post("/api:8000/request_file_open")
+def request_file_open(payload: schemas.RequestFileOpen, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        file_node = crud.get_file_node(db, payload.file_uid)
+
+        if not file_node or file_node.node_type != crud.models.NodeType.FILE:
+            raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+        # 여기서 해당 파일에 현재 작업중인 사용자가 있다고 표시하는 로직이 필요(나중에 구현)
+        
+
+        file_content = crud.read_file_content(db, file_node.uid)
+
+        return {
+            "success": True,
+            "message": "파일 열기 성공",
+            "file": {
+                "file_id": file_node.uid,
+                "file_name": file_node.display_name,
+                "parent_node_id": file_node.parent_uid,
+                "node_type": file_node.node_type.value if hasattr(file_node.node_type, "value") else str(file_node.node_type),
+                "file_path": file_node.file_path,
+                "content": file_content,
+            },
+        }
+
     finally:
         db.close()

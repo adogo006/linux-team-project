@@ -1,6 +1,7 @@
 # db 안 데이터를 조작하는 함수 모듈
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from pathlib import Path
 from . import models
 
 # ==========================================
@@ -154,18 +155,30 @@ def invite_user_to_project(db: Session, project_id: str, target_user_id: str, ro
 # 3. 파일 및 폴더 (FileNode) 관련 함수
 # ==========================================
 
-def create_file_node(db: Session, project_id: str, name: str, node_type: models.NodeType, parent_id: str = None, content: str = None):
-    """파일 또는 디렉토리 생성"""
+def create_file_node(db: Session, project_id: str, name: str, node_type: models.NodeType, parent_id: str = None):
+    """파일 또는 디렉토리 생성. 파일이면 /user_uploads에 실제 파일도 만든다."""
     db_node = models.FileNode(
         project_uid=project_id,
         display_name=name,
         node_type=node_type,
         parent_uid=parent_id,
-        file_path=content if node_type == models.NodeType.FILE else None,
+        file_path=None,
     )
     db.add(db_node)
     db.commit()
     db.refresh(db_node)
+
+    if node_type == models.NodeType.FILE:
+        uploads_dir = Path("/user_uploads")
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+        physical_file_path = uploads_dir / str(db_node.uid)
+        physical_file_path.touch(exist_ok=True)
+
+        db_node.file_path = str(physical_file_path)
+        db.commit()
+        db.refresh(db_node)
+
     return db_node
 
 def get_project_nodes(db: Session, project_id: str):
@@ -211,6 +224,19 @@ def get_file_node(db: Session, file_id: str):
     return db.query(models.FileNode).filter(
         models.FileNode.uid == file_id
     ).first()
+
+
+def read_file_content(db: Session, file_id: str) -> str:
+    """파일 노드가 가리키는 실제 파일의 문자 내용을 읽어 반환한다."""
+    file_node = get_file_node(db, file_id)
+    if not file_node or not file_node.file_path:
+        return ""
+
+    file_path = Path(file_node.file_path)
+    if not file_path.exists():
+        return ""
+
+    return file_path.read_text(encoding="utf-8")
 
 def update_file_content(db: Session, file_id: str, new_content: str):
     """파일 내용 저장"""
