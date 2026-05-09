@@ -6,14 +6,10 @@ sqlalchemy         # DB 연동 (기존 DB 매니저 활용)
 psycopg2-binary    # PostgreSQL 드라이버
 pydantic           # 데이터 모델 정의
 pydantic-settings  # 환경 변수 관리
-python-multipart   # 파일 업로드 처리
+python-multipart   # 파일 업로드 g처리
 
-<<<<<<< HEAD
 python-jose[cryptography] # JWT 토큰 생성 및 검증
 passlib[bcrypt]    # 비밀번호 해싱
 
-=======
-apscheduler        # 스케줄링 라이브러리
->>>>>>> feature/db-setup
 
 # 아래에 필요한 라이브러리 추가

@@ -2,6 +2,7 @@
 
 from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
 import datetime
 import enum
 import uuid
@@ -27,9 +28,9 @@ class User(Base):
 
     # schemas.py의 id(아이디)와 혼동을 피하기 위해 uid로 사용하거나,
     # DB 고유 ID 자체를 문자열 UUID로 사용.
-    id = Column(String, primary_key=True, default=generate_uuid, index=True)
-    username = Column(String(20), unique=True, index=True, nullable=False) # 로그인 아이디 (schemas.RequestRegister.id)
-    password_hash = Column(String, nullable=False)
+    uid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True) # DB 고유 ID
+    id = Column(String(20), unique=True, index=True, nullable=False) # 로그인 아이디 (schemas.RequestRegister.id)
+    password = Column(String, nullable=False)
     nickname = Column(String(12), unique=True, index=True, nullable=False) # 닉네임 (schemas.RequestRegister.nick_name)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -44,14 +45,15 @@ class User(Base):
 class Project(Base):
     __tablename__ = "projects"
 
-    id = Column(String, primary_key=True, default=generate_uuid, index=True) # project_id
+    uid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True) # project_id
     name = Column(String(30), nullable=False)                                # project_name
     creator_id = Column(String, ForeignKey("users.id"), nullable=False)      # 생성자
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)              # 생성 시간
 
     # 역참조
     creator = relationship("User", back_populates="owned_projects")
     members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
+
     nodes = relationship("FileNode", back_populates="project", cascade="all, delete-orphan")
     logs = relationship("ProjectLog", back_populates="project", cascade="all, delete-orphan")
 
@@ -61,10 +63,9 @@ class Project(Base):
 class ProjectMember(Base):
     __tablename__ = "project_members"
 
-    id = Column(String, primary_key=True, default=generate_uuid, index=True)
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    uid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    project_uid = Column(UUID(as_uuid=True), ForeignKey("projects.uid", ondelete="CASCADE"), nullable=False)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    role = Column(String, default="member") # 권한
     joined_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     project = relationship("Project", back_populates="members")
@@ -76,20 +77,19 @@ class ProjectMember(Base):
 class FileNode(Base):
     __tablename__ = "file_nodes"
 
-    id = Column(String, primary_key=True, default=generate_uuid, index=True) # file_id 또는 directory_id
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    parent_id = Column(String, ForeignKey("file_nodes.id", ondelete="CASCADE"), nullable=True) # 상위 폴더
-    
-    name = Column(String, nullable=False)
+    uid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True) # file_id 또는 directory_id
+    project_uid = Column(UUID(as_uuid=True), ForeignKey("projects.uid", ondelete="CASCADE"), nullable=False)
+    parent_uid = Column(UUID(as_uuid=True), ForeignKey("file_nodes.uid", ondelete="CASCADE"), nullable=True, index=True) # 상위 폴더
+
+    display_name = Column(String, nullable=False)
     node_type = Column(Enum(NodeType), nullable=False) # file or directory
-    content = Column(Text, nullable=True)              # 파일 내용 (디렉토리면 null)
-    
+    file_path = Column(String, nullable=True) # 파일 경로 (인덱스 포인터)
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     project = relationship("Project", back_populates="nodes")
-    # 트리 구조 형성을 위한 자기 참조
-    children = relationship("FileNode", backref="parent", remote_side=[id], cascade="all, delete-orphan")
+    children = relationship("FileNode", backref="parent", remote_side=[uid], cascade="all, delete-orphan")
 
 # ==========================================
 # 5. 수정 히스토리/로그 (project_logs)
@@ -97,12 +97,12 @@ class FileNode(Base):
 class ProjectLog(Base):
     __tablename__ = "project_logs"
 
-    id = Column(String, primary_key=True, default=generate_uuid, index=True) # log_id
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    uid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True) # log_id
+    project_uid = Column(UUID(as_uuid=True), ForeignKey("projects.uid", ondelete="CASCADE"), nullable=False)
     user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    
+
     # 파일이나 디렉토리에 대한 로그 (schemas.LogModel 참고)
-    target_node_id = Column(String, ForeignKey("file_nodes.id", ondelete="SET NULL"), nullable=True) 
+    target_node_uid = Column(UUID(as_uuid=True), ForeignKey("file_nodes.uid", ondelete="SET NULL"), nullable=True) 
     
     action_type = Column(String, nullable=False)                  # 생성, 수정, 삭제 등
     message = Column(Text, nullable=False)                        # log_message

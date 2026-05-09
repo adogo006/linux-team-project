@@ -9,17 +9,35 @@ from . import models
 
 def get_user_by_username(db: Session, username: str):
     """로그인 및 중복 체크 시 아이디로 유저 조회"""
-    return db.query(models.User).filter(models.User.username == username).first()
+    return db.query(models.User).filter(models.User.id == username).first()
+
+
+def get_user_by_user_id(db: Session, user_id: str):
+    """호환용 별칭: user_id로 유저 조회"""
+    return get_user_by_username(db, user_id)
 
 def get_user_by_nickname(db: Session, nickname: str):
     """닉네임 중복 체크 시 조회"""
     return db.query(models.User).filter(models.User.nickname == nickname).first()
 
-def create_user(db: Session, username: str, password_hash: str, nickname: str):
+def create_user(
+    db: Session,
+    username: str | None = None,
+    password_hash: str | None = None,
+    nickname: str | None = None,
+    user_id: str | None = None,
+    password: str | None = None,
+):
     """회원가입 기능 (새 계정 생성)"""
+    username = username or user_id
+    password_hash = password_hash or password
+
+    if not username or not password_hash or not nickname:
+        return None
+
     db_user = models.User(
-        username=username, 
-        password_hash=password_hash, 
+        id=username, 
+        password=password_hash, 
         nickname=nickname
     )
     db.add(db_user)
@@ -45,9 +63,8 @@ def create_project(db: Session, project_name: str, creator_id: str):
 
     # 2. 생성자를 프로젝트 멤버(owner)로 즉시 등록
     db_member = models.ProjectMember(
-        project_id=db_project.id, 
+        project_uid=db_project.uid,
         user_id=creator_id, 
-        role="owner"
     )
     db.add(db_member)
     db.commit()
@@ -57,13 +74,49 @@ def create_project(db: Session, project_name: str, creator_id: str):
 def get_project_list_by_user(db: Session, user_id: str):
     """특정 유저가 속해있는(수정 가능한) 프로젝트 목록 반환"""
     # ProjectMember 테이블을 조인해서 해당 유저가 포함된 프로젝트만 가져옴
-    return db.query(models.Project).join(models.ProjectMember).filter(
-        models.ProjectMember.user_id == user_id
+    return db.query(models.Project).join(
+        models.ProjectMember,
+        models.Project.uid == models.ProjectMember.project_uid,
+    ).filter(
+        models.ProjectMember.user_id == user_id,
     ).all()
+
+
+def get_projects_by_user_id(db: Session, user_id: str):
+    """호환용 별칭: 사용자 프로젝트 목록"""
+    return get_project_list_by_user(db, user_id)
+
+
+def add_project_member(db: Session, project_id: str, user_id: str, role: str = "member"):
+    """프로젝트 멤버 추가 (role은 호환용 파라미터로만 받음)."""
+    _ = role
+    db_member = models.ProjectMember(project_uid=project_id, user_id=user_id)
+    db.add(db_member)
+    db.commit()
+    db.refresh(db_member)
+    return db_member
+
+
+def check_project_member(db: Session, project_id: str, user_id: str):
+    """유저의 프로젝트 멤버 여부 확인"""
+    return (
+        db.query(models.ProjectMember)
+        .filter(
+            models.ProjectMember.project_uid == project_id,
+            models.ProjectMember.user_id == user_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def get_project_by_id(db: Session, project_id: str):
+    """project uid로 프로젝트 조회"""
+    return db.query(models.Project).filter(models.Project.uid == project_id).first()
 
 def delete_project(db: Session, project_id: str, requester_id: str):
     """프로젝트 삭제 (요청자가 owner인지 확인 후 삭제)"""
-    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    project = db.query(models.Project).filter(models.Project.uid == project_id).first()
     
     if project and project.creator_id == requester_id:
         db.delete(project)
@@ -75,14 +128,15 @@ def invite_user_to_project(db: Session, project_id: str, target_user_id: str, ro
     """프로젝트 초대 기능"""
     # 이미 멤버인지 확인
     existing_member = db.query(models.ProjectMember).filter(
-        models.ProjectMember.project_id == project_id,
+        models.ProjectMember.project_uid == project_id,
         models.ProjectMember.user_id == target_user_id
     ).first()
     
     if existing_member:
         return None # 이미 초대됨
 
-    db_member = models.ProjectMember(project_id=project_id, user_id=target_user_id, role=role)
+    _ = role
+    db_member = models.ProjectMember(project_uid=project_id, user_id=target_user_id)
     db.add(db_member)
     db.commit()
     return db_member
@@ -94,11 +148,11 @@ def invite_user_to_project(db: Session, project_id: str, target_user_id: str, ro
 def create_file_node(db: Session, project_id: str, name: str, node_type: models.NodeType, parent_id: str = None, content: str = None):
     """파일 또는 디렉토리 생성"""
     db_node = models.FileNode(
-        project_id=project_id,
-        name=name,
+        project_uid=project_id,
+        display_name=name,
         node_type=node_type,
-        parent_id=parent_id,
-        content=content if node_type == models.NodeType.FILE else None
+        parent_uid=parent_id,
+        file_path=content if node_type == models.NodeType.FILE else None,
     )
     db.add(db_node)
     db.commit()
@@ -107,24 +161,39 @@ def create_file_node(db: Session, project_id: str, name: str, node_type: models.
 
 def get_project_nodes(db: Session, project_id: str):
     """프로젝트 내의 모든 파일/폴더 구조 가져오기 (프로젝트 Open 시 사용)"""
-    return db.query(models.FileNode).filter(models.FileNode.project_id == project_id).all()
+    return db.query(models.FileNode).filter(models.FileNode.project_uid == project_id).all()
+
+
+def get_project_file_tree(db: Session, project_id: str):
+    """프로젝트 파일 트리를 단순 리스트 형태로 반환"""
+    nodes = get_project_nodes(db, project_id)
+    return [
+        {
+            "id": str(node.uid),
+            "parent_id": str(node.parent_uid) if node.parent_uid else None,
+            "name": node.display_name,
+            "type": node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type),
+            "path": node.file_path,
+        }
+        for node in nodes
+    ]
 
 def get_file_content(db: Session, file_id: str):
     """단일 파일 내용 조회 (파일 열기)"""
     return db.query(models.FileNode).filter(
-        models.FileNode.id == file_id, 
+        models.FileNode.uid == file_id,
         models.FileNode.node_type == models.NodeType.FILE
     ).first()
 
 def update_file_content(db: Session, file_id: str, new_content: str):
     """파일 내용 저장"""
     db_file = db.query(models.FileNode).filter(
-        models.FileNode.id == file_id,
+        models.FileNode.uid == file_id,
         models.FileNode.node_type == models.NodeType.FILE
     ).first()
     
     if db_file:
-        db_file.content = new_content
+        db_file.file_path = new_content
         db.commit()
         db.refresh(db_file)
         return db_file
@@ -132,9 +201,9 @@ def update_file_content(db: Session, file_id: str, new_content: str):
 
 def rename_node(db: Session, node_id: str, new_name: str):
     """파일/디렉토리 이름 변경"""
-    db_node = db.query(models.FileNode).filter(models.FileNode.id == node_id).first()
+    db_node = db.query(models.FileNode).filter(models.FileNode.uid == node_id).first()
     if db_node:
-        db_node.name = new_name
+        db_node.display_name = new_name
         db.commit()
         db.refresh(db_node)
         return db_node
@@ -142,7 +211,7 @@ def rename_node(db: Session, node_id: str, new_name: str):
 
 def delete_node(db: Session, node_id: str):
     """파일 또는 디렉토리 삭제 (CASCADE로 인해 하위 폴더/파일도 자동 삭제됨)"""
-    db_node = db.query(models.FileNode).filter(models.FileNode.id == node_id).first()
+    db_node = db.query(models.FileNode).filter(models.FileNode.uid == node_id).first()
     if db_node:
         db.delete(db_node)
         db.commit()
@@ -153,12 +222,29 @@ def delete_node(db: Session, node_id: str):
 # 4. 수정 로그 (ProjectLog) 관련 함수
 # ==========================================
 
-def create_project_log(db: Session, project_id: str, user_id: str, action_type: str, message: str, target_node_id: str = None, start_time=None):
+def create_project_log(
+    db: Session,
+    project_id: str,
+    user_id: str | None = None,
+    action_type: str | None = None,
+    message: str | None = None,
+    target_node_id: str | None = None,
+    start_time=None,
+    nickname: str | None = None,
+    action: str | None = None,
+):
     """파일 수정 완료 등 특정 액션 후 히스토리 기록 저장"""
+    if user_id is None and nickname:
+        user = get_user_by_nickname(db, nickname)
+        user_id = user.id if user else None
+
+    action_type = action_type or action or "UNKNOWN"
+    message = message or ""
+
     db_log = models.ProjectLog(
-        project_id=project_id,
+        project_uid=project_id,
         user_id=user_id,
-        target_node_id=target_node_id,
+        target_node_uid=target_node_id,
         action_type=action_type,
         message=message,
         start_time=start_time
@@ -171,5 +257,5 @@ def create_project_log(db: Session, project_id: str, user_id: str, action_type: 
 def get_project_logs(db: Session, project_id: str):
     """특정 프로젝트의 수정 히스토리 조회 (최신순 정렬)"""
     return db.query(models.ProjectLog).filter(
-        models.ProjectLog.project_id == project_id
+        models.ProjectLog.project_uid == project_id
     ).order_by(models.ProjectLog.end_time.desc()).all()
