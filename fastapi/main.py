@@ -758,7 +758,7 @@ def request_project_invite(payload: schemas.RequestProjectInvite, authorization:
         if target_user.id == project.creator_id:
             raise HTTPException(status_code=400, detail="프로젝트 생성자는 이미 프로젝트에 속해 있습니다.")
 
-        existing_membership = crud.get_project_member(db, payload.project_id, target_user.id)
+        existing_membership = crud.check_project_member(db, payload.project_id, target_user.id)
         if existing_membership:
             raise HTTPException(status_code=400, detail="사용자는 이미 프로젝트에 속해 있습니다.")
 
@@ -816,7 +816,7 @@ def request_project_remove_member(payload: schemas.RequestProjectRemoveMember, a
         if target_user.id == project.creator_id:
             raise HTTPException(status_code=400, detail="프로젝트 생성자는 프로젝트에서 추방할 수 없습니다.")
 
-        existing_membership = crud.get_project_member(db, payload.project_id, target_user.id)
+        existing_membership = crud.check_project_member(db, payload.project_id, target_user.id)
         if not existing_membership:
             raise HTTPException(status_code=400, detail="사용자는 프로젝트에 속해 있지 않습니다.")
 
@@ -838,7 +838,46 @@ def request_project_remove_member(payload: schemas.RequestProjectRemoveMember, a
     finally:
         db.close()
 
+#프로젝트 멤버 목록 조회 및 수정 중인 사용자 정보 반영
+@app.post("/api:8000/request_project_members")
+def request_project_members(payload: schemas.RequestProjectMembers, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
 
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        members = crud.get_project_members(db, payload.project_id)
+
+        return {
+            "success": True,
+            "message": "프로젝트 멤버 목록 조회 성공",
+            "members": [
+                {
+                    "user_id": member.user.id,
+                    "nickname": member.user.nickname,
+                    "is_creator": member.user.id == crud.get_project_by_id(db, payload.project_id).creator_id,
+                }
+                for member in members
+            ],
+        }
+
+    finally:
+        db.close()
 
 
 

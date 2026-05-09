@@ -118,6 +118,9 @@ def check_project_member(db: Session, project_id: str, user_id: str):
         is not None
     )
 
+def get_project_members(db: Session, project_id: str):
+    """프로젝트 멤버 목록 조회"""
+    return db.query(models.ProjectMember).filter(models.ProjectMember.project_uid == project_id).all()
 
 def get_project_by_id(db: Session, project_id: str):
     """project uid로 프로젝트 조회"""

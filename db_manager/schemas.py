@@ -45,6 +45,9 @@ class RequestProjectRemoveMember(BaseModel):
     requester_nickname: str = Field(..., description="멤버 제거 요청자 닉네임")
     target_nickname: str = Field(..., description="제거할 대상 닉네임")
 
+class RequestProjectMembers(BaseModel):
+    project_id: str = Field(..., description="프로젝트 고유 ID")
+
 class RequestProjectOpen(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
 
