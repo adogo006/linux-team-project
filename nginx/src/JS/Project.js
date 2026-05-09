@@ -1,37 +1,41 @@
 // ── project.js ──
 
 // ── 임시 데이터 (API 연결 전 Mock) ──────────────────────────
-const currentUser = { username: "dev_user", nickname: "개발자" };
+const currentUser = { username: "KYJ", nickname: "김" };
 
 let myProjects = [
   {
     id: 1,
     name: "Auth Service",
-    owner: "dev_user",
+    owner: "Root",
     description: "사용자 인증 및 JWT 토큰 발급을 담당하는 MSA 인증 서비스",
   },
   {
     id: 2,
     name: "API Gateway",
-    owner: "dev_user",
+    owner: "MH",
     description: "각 마이크로서비스로의 라우팅 및 로드밸런싱 처리 게이트웨이",
   },
   {
     id: 3,
     name: "Frontend UI",
-    owner: "dev_user",
+    owner: "Ch",
     description: "CodeSync 웹 클라이언트 — React 기반 실시간 협업 에디터 UI",
   },
 ];
 
 let invites = [
-  { id: 101, projectName: "Data Pipeline", fromUser: "alice" },
-  { id: 102, projectName: "ML Model Server", fromUser: "bob" },
+  { id: 101, projectName: "Data Pipeline", fromUser: "김경운" },
+  { id: 102, projectName: "ML Model Server", fromUser: "원미혜" },
+  { id: 103, projectName: "Tester", fromUser: "추송주" },
 ];
 
 // ── 초기화 ────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("nav-username").textContent = currentUser.username;
+  document.getElementById("nav-avatar").textContent = getInitials(
+    currentUser.nickname,
+  );
   renderProjects();
   renderInvites();
 });
@@ -202,6 +206,12 @@ function escHtml(str) {
         c
       ],
   );
+}
+
+function getInitials(nickname) {
+  if (!nickname) return "?";
+  const hasKorean = /[가-힣]/.test(nickname);
+  return nickname.slice(0, hasKorean ? 1 : 2).toUpperCase();
 }
 
 // ESC 키로 모달 닫기

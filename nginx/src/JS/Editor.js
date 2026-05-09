@@ -6,18 +6,18 @@
 // const params = new URLSearchParams(window.location.search);
 // const projectId = params.get('id');
 
-const currentUser = { username: "dev_user", nickname: "개발자", role: "owner" };
+const currentUser = { username: "KYJ", nickname: "김영준", role: "owner" };
 // role: 'owner' | 'leader' | 'member'
 
 const projectInfo = { id: 1, name: "Auth Service" };
 
 const members = [
-  { username: "dev_user", nickname: "개발자", role: "owner" },
-  { username: "alice", nickname: "Alice", role: "leader" },
-  { username: "bob", nickname: "Bob", role: "leader" },
-  { username: "charlie", nickname: "Charlie", role: "member" },
-  { username: "dana", nickname: "Dana", role: "member" },
-  { username: "evan", nickname: "Evan", role: "member" },
+  { username: "KYJ", nickname: "김영준", role: "owner" },
+  { username: "K", nickname: "김경운", role: "leader" },
+  { username: "W", nickname: "원미혜", role: "leader" },
+  { username: "C", nickname: "추송주", role: "leader" },
+  { username: "test", nickname: "Tester", role: "member" },
+  { username: "abc", nickname: "ABC123", role: "member" },
 ];
 
 // 파일 트리 구조
@@ -35,7 +35,7 @@ const fileTree = [
           {
             type: "file",
             name: "AuthController.java",
-            editingBy: "alice",
+            editingBy: "김경운",
             access: ["dev_user", "alice", "bob"],
           },
           {
@@ -81,7 +81,7 @@ const fileTree = [
       {
         type: "file",
         name: "application.yml",
-        editingBy: "bob",
+        editingBy: "원미혜",
         access: ["dev_user", "alice", "bob", "charlie"],
       },
     ],
@@ -253,7 +253,7 @@ function renderUsers() {
     html += `<div class="role-group">
       <div class="role-label">${groupMeta[role].label}</div>`;
     for (const m of groups[role]) {
-      const initials = m.nickname.slice(0, 2).toUpperCase();
+      const initials = getInitials(m.nickname);
       const canManage =
         currentUser.role === "owner" ||
         (currentUser.role === "leader" && role === "member");
@@ -345,6 +345,19 @@ function toggleFolder(path) {
   }
 }
 
+// 컨텍스트 메뉴 위치 계산 — 화면 밖으로 나가지 않도록 보정
+function calcMenuPos(e, menuWidth = 170, menuHeight = 80) {
+  const x =
+    e.clientX + menuWidth > window.innerWidth
+      ? e.clientX - menuWidth
+      : e.clientX;
+  const y =
+    e.clientY + menuHeight > window.innerHeight
+      ? e.clientY - menuHeight
+      : e.clientY;
+  return { x, y };
+}
+
 // 폴더의 + 버튼 → 컨텍스트 메뉴
 function openTreeCtx(e, folderPath) {
   e.stopPropagation();
@@ -357,8 +370,9 @@ function openTreeCtx(e, folderPath) {
     <div class="ctx-item" onclick="addFile('${folderPath}'); closeCtxMenu()">📄 파일 추가</div>
     <div class="ctx-item" onclick="addFolder('${folderPath}'); closeCtxMenu()">📁 폴더 추가</div>
   `;
-  menu.style.top = e.clientY + "px";
-  menu.style.left = e.clientX + "px";
+  const { x, y } = calcMenuPos(e, 170, 80);
+  menu.style.top = y + "px";
+  menu.style.left = x + "px";
   document.body.appendChild(menu);
   setTimeout(
     () => document.addEventListener("click", closeCtxMenu, { once: true }),
@@ -656,8 +670,9 @@ function openUserMenu(e, username, role) {
   menu.className = "ctx-menu";
   menu.id = "ctx-menu";
   menu.innerHTML = items;
-  menu.style.top = e.clientY + "px";
-  menu.style.left = e.clientX + "px";
+  const { x, y } = calcMenuPos(e, 170, 120);
+  menu.style.top = y + "px";
+  menu.style.left = x + "px";
   document.body.appendChild(menu);
 
   setTimeout(
@@ -753,6 +768,13 @@ function escHtml(str) {
         c
       ],
   );
+}
+
+// 한글 포함 여부에 따라 1글자, 영문이면 2글자 이니셜
+function getInitials(nickname) {
+  if (!nickname) return "?";
+  const hasKorean = /[가-힣]/.test(nickname);
+  return nickname.slice(0, hasKorean ? 1 : 2).toUpperCase();
 }
 
 function handleDeleteOverlay(e) {

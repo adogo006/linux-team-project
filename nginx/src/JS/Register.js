@@ -1,173 +1,245 @@
 // ── register.js ──
 
-// 중복 확인 통과 여부 추적
-const checked = { nickname: false, username: false };
-const pwValid = { match: false };
+const API_BASE = "http://YOUR_API_URL"; // TODO: API URL 확정되면 교체
 
-function resetCheck(field) {
-  checked[field] = false;
-  const input = document.getElementById(field);
-  input.classList.remove("valid", "invalid");
-  document.getElementById(field + "-hint").textContent =
-    field === "nickname" ? "한글/영문 2~12자" : "영문·숫자 조합 최대 12자";
-  document.getElementById(field + "-hint").className = "hint info";
-  updateSubmitBtn();
+// ── 상태 ─────────────────────────────────────────────────────
+const checked = { nickname: false, username: false };
+const pwState = { valid: false, match: false };
+
+// ── API 함수 ──────────────────────────────────────────────────
+
+// 닉네임 중복 확인
+async function request_register_nickname(nickname) {
+  const res = await fetch(`${API_BASE}/api/auth/check-nickname`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nickname }),
+  });
+  const data = await res.json();
+  return data; // true: 사용 가능, false: 중복
 }
 
+// 아이디 중복 확인
+async function request_register_id(username) {
+  const res = await fetch(`${API_BASE}/api/auth/check-id`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+  const data = await res.json();
+  return data; // true: 사용 가능, false: 중복
+}
+
+// 회원가입
+async function request_register(nickname, username, password) {
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nickname, username, password }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.message || "REGISTER_FAILED");
+  }
+}
+
+// ── 유효성 검사 규칙 ──────────────────────────────────────────
+const rules = {
+  nickname: {
+    regex: /^[가-힣a-zA-Z0-9]{2,12}$/,
+    hint: "한글, 영문, 숫자 (2~12자)",
+    err: "한글, 영문, 숫자만 사용하고 2~12자로 입력해주세요.",
+  },
+  username: {
+    regex: /^[a-zA-Z0-9]{2,12}$/,
+    hint: "영문, 숫자 (2~12자)",
+    err: "영문, 숫자만 사용하고 2~12자로 입력해주세요.",
+  },
+};
+
+// ── 실시간 유효성 확인 (타이핑마다 호출) ─────────────────────
+function validateField(field) {
+  const input = document.getElementById(field);
+  const hint = document.getElementById(field + "-hint");
+  const btn = document.getElementById(field + "-btn");
+  const value = input.value.trim();
+
+  // 이전 중복확인 결과 초기화
+  checked[field] = false;
+  updateSubmitBtn();
+
+  if (value.length === 0) {
+    input.classList.remove("valid", "invalid");
+    hint.textContent = rules[field].hint;
+    hint.className = "hint info";
+    btn.disabled = true;
+    btn.className = "btn-check";
+    return;
+  }
+
+  if (rules[field].regex.test(value)) {
+    input.classList.add("valid");
+    input.classList.remove("invalid");
+    hint.textContent = "✓ 형식이 올바릅니다. 중복 확인을 해주세요.";
+    hint.className = "hint ok";
+    btn.disabled = false; // 중복 확인 버튼 활성화
+    btn.className = "btn-check active";
+  } else {
+    input.classList.add("invalid");
+    input.classList.remove("valid");
+    hint.textContent = rules[field].err;
+    hint.className = "hint fail";
+    btn.disabled = true;
+    btn.className = "btn-check";
+  }
+}
+
+// ── 중복 확인 버튼 ────────────────────────────────────────────
 async function checkDuplicate(field) {
   const input = document.getElementById(field);
   const hint = document.getElementById(field + "-hint");
+  const btn = document.getElementById(field + "-btn");
   const value = input.value.trim();
-
-  // 클라이언트 유효성 검사
-  if (field === "nickname" && (value.length < 2 || value.length > 12)) {
-    hint.textContent = "닉네임은 2~12자여야 합니다.";
-    hint.className = "hint fail";
-    input.classList.add("invalid");
-    input.classList.remove("valid");
-    return;
-  }
-  if (
-    field === "username" &&
-    !/^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z0-9]{1,12}$/.test(value)
-  ) {
-    hint.textContent = "영문·숫자 조합 최대 12자로 입력해주세요.";
-    hint.className = "hint fail";
-    input.classList.add("invalid");
-    input.classList.remove("valid");
-    return;
-  }
 
   hint.textContent = "확인 중...";
   hint.className = "hint info";
+  btn.disabled = true;
 
   try {
-    // TODO: API URL 확정되면 교체
-    const API_URL = `http://YOUR_API_URL/api/auth/check-${field}?value=${encodeURIComponent(value)}`;
-    const res = await fetch(API_URL);
-    const data = await res.json();
+    const available =
+      field === "nickname"
+        ? await request_register_nickname(value)
+        : await request_register_id(value);
 
-    if (data.available) {
+    if (available) {
       hint.textContent = "✓ 사용 가능합니다.";
       hint.className = "hint ok";
       input.classList.add("valid");
       input.classList.remove("invalid");
       checked[field] = true;
+      // 버튼 → 파란색 체크 스타일
+      btn.textContent = "✓ 확인됨";
+      btn.className = "btn-check confirmed";
+      btn.disabled = true;
     } else {
-      hint.textContent =
-        "✗ 이미 사용 중인 " +
-        (field === "nickname" ? "닉네임" : "아이디") +
-        "입니다.";
+      hint.textContent = `✗ 이미 사용 중인 ${field === "nickname" ? "닉네임" : "아이디"}입니다.`;
       hint.className = "hint fail";
       input.classList.add("invalid");
       input.classList.remove("valid");
       checked[field] = false;
+      btn.disabled = false;
+      btn.className = "btn-check active";
     }
   } catch (e) {
-    // [DEV] Mock 처리
-    hint.textContent = "[DEV] 사용 가능 (API 미연결)";
-    hint.className = "hint ok";
-    input.classList.add("valid");
-    input.classList.remove("invalid");
-    checked[field] = true;
+    hint.textContent = "서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.";
+    hint.className = "hint fail";
+    btn.disabled = false;
+    btn.className = "btn-check active";
   }
 
   updateSubmitBtn();
 }
 
-function checkPwMatch() {
-  const pw = document.getElementById("password").value;
-  const pw2 = document.getElementById("password-confirm").value;
-  const pwHint = document.getElementById("pw-hint");
-  const matchHint = document.getElementById("pw-match-hint");
-  const fill = document.getElementById("pw-match-fill");
-  const pwInput = document.getElementById("password");
-  const pw2Input = document.getElementById("password-confirm");
+// ── 비밀번호 실시간 확인 ──────────────────────────────────────
+const PW_REGEX =
+  /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]).{8,}$/;
 
-  // 비밀번호 강도 체크
-  const strongPw = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/.test(pw);
+function checkPassword() {
+  const pw = document.getElementById("password").value;
+  const pwHint = document.getElementById("pw-hint");
+  const pwInput = document.getElementById("password");
 
   if (pw.length === 0) {
-    pwHint.textContent = "영문·숫자·특수문자 포함 8자 이상";
+    pwHint.textContent = "영문, 숫자, 특수문자 포함 8자 이상";
     pwHint.className = "hint info";
     pwInput.classList.remove("valid", "invalid");
-  } else if (strongPw) {
+    pwState.valid = false;
+  } else if (PW_REGEX.test(pw)) {
     pwHint.textContent = "✓ 안전한 비밀번호입니다.";
     pwHint.className = "hint ok";
     pwInput.classList.add("valid");
     pwInput.classList.remove("invalid");
+    pwState.valid = true;
   } else {
-    pwHint.textContent = "영문·숫자·특수문자를 모두 포함해야 합니다.";
+    pwHint.textContent = "영문, 숫자, 특수문자를 모두 포함해주세요.";
     pwHint.className = "hint fail";
     pwInput.classList.add("invalid");
     pwInput.classList.remove("valid");
+    pwState.valid = false;
   }
 
-  // 비밀번호 일치 확인
+  // 비밀번호 바뀌면 재입력도 다시 확인
+  checkConfirm();
+}
+
+function checkConfirm() {
+  const pw = document.getElementById("password").value;
+  const pw2 = document.getElementById("password-confirm").value;
+  const matchHint = document.getElementById("pw-match-hint");
+  const fill = document.getElementById("pw-match-fill");
+  const pw2Input = document.getElementById("password-confirm");
+
   if (pw2.length === 0) {
     fill.style.width = "0%";
     matchHint.textContent = "";
     matchHint.className = "hint info";
     pw2Input.classList.remove("valid", "invalid");
-    pwValid.match = false;
-  } else if (pw === pw2) {
+    pwState.match = false;
+  } else if (pw === pw2 && pwState.valid) {
     fill.style.width = "100%";
     fill.style.background = "#22c55e";
     matchHint.textContent = "✓ 비밀번호가 일치합니다.";
     matchHint.className = "hint ok";
     pw2Input.classList.add("valid");
     pw2Input.classList.remove("invalid");
-    pwValid.match = strongPw;
+    pwState.match = true;
   } else {
-    const ratio = Math.min(pw2.length / pw.length, 0.9) * 100;
+    const ratio =
+      pw.length > 0 ? Math.min(pw2.length / pw.length, 0.9) * 100 : 0;
     fill.style.width = ratio + "%";
     fill.style.background = "#f87171";
-    matchHint.textContent = "✗ 비밀번호가 일치하지 않습니다.";
+    matchHint.textContent =
+      pw === pw2
+        ? "비밀번호 형식을 먼저 충족해주세요."
+        : "✗ 비밀번호가 일치하지 않습니다.";
     matchHint.className = "hint fail";
     pw2Input.classList.add("invalid");
     pw2Input.classList.remove("valid");
-    pwValid.match = false;
+    pwState.match = false;
   }
 
   updateSubmitBtn();
 }
 
+// ── 가입 버튼 활성화 조건 ─────────────────────────────────────
 function updateSubmitBtn() {
-  const ready = checked.nickname && checked.username && pwValid.match;
+  const ready =
+    checked.nickname && checked.username && pwState.valid && pwState.match;
   document.getElementById("submit-btn").disabled = !ready;
 }
 
+// ── 회원가입 제출 ─────────────────────────────────────────────
 async function handleRegister() {
   const status = document.getElementById("reg-status");
-  const body = {
-    nickname: document.getElementById("nickname").value.trim(),
-    username: document.getElementById("username").value.trim(),
-    password: document.getElementById("password").value,
-  };
+  const nickname = document.getElementById("nickname").value.trim();
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
 
   status.textContent = "처리 중...";
   status.className = "status";
 
   try {
-    // TODO: API URL 확정되면 교체
-    const API_URL = "http://YOUR_API_URL/api/auth/register";
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
+    await request_register(nickname, username, password);
 
-    if (res.ok) {
-      status.textContent = "✓ 회원가입이 완료되었습니다!";
-      status.className = "status success";
-      setTimeout(goLogin, 1500);
-    } else {
-      status.textContent = data.message || "회원가입에 실패했습니다.";
-      status.className = "status error";
-    }
+    status.textContent =
+      "✓ 회원가입이 완료되었습니다! 로그인 페이지로 이동합니다.";
+    status.className = "status success";
+    setTimeout(goLogin, 1800);
   } catch (e) {
-    status.textContent = "[DEV] API 미연결 상태입니다.";
+    status.textContent =
+      e.message === "REGISTER_FAILED"
+        ? "회원가입에 실패했습니다. 다시 시도해주세요."
+        : "서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.";
     status.className = "status error";
   }
 }

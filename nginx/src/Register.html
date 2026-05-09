@@ -22,14 +22,21 @@
           <input
             type="text"
             id="nickname"
-            placeholder="사용할 닉네임"
-            oninput="resetCheck('nickname')"
+            placeholder="한글, 영문, 숫자 (2~12자)"
+            oninput="validateField('nickname')"
           />
-          <button class="btn-check" onclick="checkDuplicate('nickname')">
+          <button
+            class="btn-check"
+            id="nickname-btn"
+            onclick="checkDuplicate('nickname')"
+            disabled
+          >
             중복 확인
           </button>
         </div>
-        <div class="hint info" id="nickname-hint">한글/영문 2~12자</div>
+        <div class="hint info" id="nickname-hint">
+          한글, 영문, 숫자 (2~12자)
+        </div>
       </div>
 
       <div class="section-label">계정</div>
@@ -40,14 +47,19 @@
           <input
             type="text"
             id="username"
-            placeholder="사용할 아이디"
-            oninput="resetCheck('username')"
+            placeholder="영문, 숫자 (2~12자)"
+            oninput="validateField('username')"
           />
-          <button class="btn-check" onclick="checkDuplicate('username')">
+          <button
+            class="btn-check"
+            id="username-btn"
+            onclick="checkDuplicate('username')"
+            disabled
+          >
             중복 확인
           </button>
         </div>
-        <div class="hint info" id="username-hint">영문·숫자 조합 최대 12자</div>
+        <div class="hint info" id="username-hint">영문, 숫자 (2~12자)</div>
       </div>
 
       <div class="field">
@@ -55,11 +67,11 @@
         <input
           type="password"
           id="password"
-          placeholder="비밀번호 입력"
-          oninput="checkPwMatch()"
+          placeholder="영문, 숫자, 특수문자 포함 8자 이상"
+          oninput="checkPassword()"
         />
         <div class="hint info" id="pw-hint">
-          영문·숫자·특수문자 포함 8자 이상
+          영문, 숫자, 특수문자 포함 8자 이상
         </div>
       </div>
 
@@ -69,7 +81,7 @@
           type="password"
           id="password-confirm"
           placeholder="비밀번호 재입력"
-          oninput="checkPwMatch()"
+          oninput="checkConfirm()"
         />
         <div class="pw-match">
           <div class="pw-match-fill" id="pw-match-fill"></div>
