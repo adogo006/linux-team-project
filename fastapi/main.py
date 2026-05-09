@@ -52,13 +52,11 @@ def cleanup_editing_users():
 
 def get_active_editors(file_uid: str):
     """Return current active nicknames for the file."""
-    cleanup_editing_users()
     return list(editing_users.get(file_uid, {}).keys())
 
 
 def touch_editing_user(file_uid: str, nickname: str):
     """Register or refresh a file editor heartbeat."""
-    cleanup_editing_users()
     file_users = editing_users.setdefault(file_uid, {})
     file_users[nickname] = datetime.now(timezone.utc)
 
@@ -76,8 +74,8 @@ def release_editing_user(file_uid: str, nickname: str):
 
 def has_other_active_editor(file_uid: str, nickname: str):
     """Check whether another user is actively editing the file."""
-    active_editors = get_active_editors(file_uid)
-    return any(active_nickname != nickname for active_nickname in active_editors)
+    file_users = editing_users.get(file_uid, {})
+    return any(nick != nickname for nick in file_users.keys())
 
 
 #회원가입 아이디 중복 체크
@@ -529,6 +527,7 @@ def request_file_heartbeat(payload: schemas.RequestFileAction, authorization: st
         if not file_node or file_node.node_type != crud.models.NodeType.FILE:
             raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
 
+        cleanup_editing_users()  # 주기적으로 한 번만 정리 (heartbeat에서만)
         touch_editing_user(file_node.uid, user.nickname)
 
         return {
@@ -863,7 +862,7 @@ def request_project_members(payload: schemas.RequestProjectMembers, authorizatio
 
         members = crud.get_project_members(db, payload.project_id)
 
-        # 편집 중인 사용자 정보 미리 정리
+        # 편집 중인 사용자 정보 정리 (조회 시에만)
         cleanup_editing_users()
 
         return {
@@ -916,7 +915,7 @@ def request_project_delete(payload: schemas.RequestProjectOpen, authorization: s
         if project.creator_id != user.id:
             raise HTTPException(status_code=403, detail="프로젝트 삭제는 생성자만 가능합니다.")
 
-        cleanup_editing_users()
+        cleanup_editing_users()  # 삭제 시에만 정리
         nodes = crud.get_project_nodes(db, payload.project_id)
         for node in nodes:
             if node.uid in editing_users:
@@ -968,13 +967,14 @@ def request_file_delete(payload: schemas.RequestFileDelete, authorization: str |
         if not node:
             raise HTTPException(status_code=404, detail="노드를 찾을 수 없습니다.")
 
-        cleanup_editing_users()
-        if node.node_type == crud.models.NodeType.FILE and has_other_active_editor(node.uid, user.nickname):
-            return{
-                "success": False,
-                "message": "해당 파일에서 다른 사용자가 수정 중입니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
-                "editing_users": get_active_editors(node.uid),
-            }
+        if node.node_type == crud.models.NodeType.FILE:
+            cleanup_editing_users()  # 삭제 시에만 정리
+            if has_other_active_editor(node.uid, user.nickname):
+                return{
+                    "success": False,
+                    "message": "해당 파일에서 다른 사용자가 수정 중입니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
+                    "editing_users": get_active_editors(node.uid),
+                }
 
         crud.delete_file_data(node.file_path)
         crud.delete_node(db, node)
@@ -1029,7 +1029,7 @@ def request_directory_delete(payload: schemas.RequestDirectoryDelete, authorizat
 
         # 디렉토리 내 모든 파일에 대해 편집 중인 사용자가 있는지 확인
         descendant_file_nodes = crud.get_descendant_file_nodes(db, node.uid)
-        cleanup_editing_users()
+        cleanup_editing_users()  # 삭제 시에만 정리
         for file in descendant_file_nodes:
             if has_other_active_editor(file.uid, user.nickname):
                 return {
