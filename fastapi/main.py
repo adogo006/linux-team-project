@@ -3,53 +3,57 @@
 # 비동기로 작성해야 요청을 효율적으로 처리할 수 있습니다. (async def, await 등 사용)
 
 from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi.security import OAuth2PasswordBearer
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 from jose import jwt, JWTError
+from db_manager import crud, schemas
+from db_manager.db_handler import SessionLocal
+import token as token_module
 
 import os
 import uuid
 import httpx
-#from pydantic import ValidationError
-#from uuid import UUID
-
-from schemas import CrawlRelayRequest, CrawlerCallbackPayload, RequestLogUpsert, RegisterRequest, LoginRequest, ProjectCreateRequest, ProjectListRequest, ProjectOpenRequest
-from DB_manager.models import RequestStatus
-from api_crud import api_create_request_log, api_get_request_log, api_update_request_log
-from DB_manager.database import SessionLocal, engine
-from DB_manager import models
-from DB_manager.db_handler import engine
-from scheduler_runtime import start_scheduler, stop_scheduler
-
+from schemas import  RequestLogUpsert, RegisterRequest, LoginRequest, ProjectCreateRequest, ProjectListRequest, ProjectOpenRequest
 
 SECRET_KEY = os.getenv("SECRET_KEY", "temporary-secret-key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
-expired_tokens = set()
+oauth2scheme = OAuth2PasswordBearer(tokenUrl="request_login")
 
 #############
 #crud부르기
-from DB_manager import crud
 
-from scheduler_runtime import start_scheduler, stop_scheduler
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    start_scheduler()
-    try:
-        yield
-    finally:
-        stop_scheduler()
-
-
-app = FastAPI(title="InsideViral API", lifespan=lifespan)
+app = FastAPI(title="InsideViral API")
 
 ########################
 ##회원가입 등록 및 중복확인
+@app.post("/api:8000/request_id_check")
+def request_id_check(payload: schemas.RegisterRequest):
+    db = SessionLocal()
+    try:
+        existing_user = crud.get_user_by_user_id(db, payload.user_id)
+        if existing_user:
+            return {"available": False}
+        return {"available": True}
+    finally:
+        db.close()
+
+@app.post("/api:8000/request_nickname_check")
+def request_nickname_check(payload: schemas.RegisterRequest):
+    db = SessionLocal()
+    try:
+        existing_nickname = crud.get_user_by_nickname(db, payload.nickname)
+        if existing_nickname:
+            return {"available": False}
+        return {"available": True}
+    finally:
+        db.close()
+
 @app.post("/api:8000/request_register")
-def request_register(payload: RegisterRequest):
+def request_register(payload: schemas.RegisterRequest):
     db = SessionLocal()
 
     try:
@@ -80,22 +84,12 @@ def request_register(payload: RegisterRequest):
     finally:
         db.close()
 
-
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-
-#로그인 요청 받기
+#로그인 요청 받기, ResponseLogin 모델로 응답하기, JWT 토큰 생성해서 반환하기
 @app.post("/api:8000/request_login")
-def request_login(payload: LoginRequest):
+def request_login(payload: schemas.RequestLogin):
     db = SessionLocal()
-
     try:
-        user = crud.get_user_by_user_id(db, payload.user_id)
+        user = crud.get_user_by_user_id(db, payload.id)
 
         if not user:
             return {
@@ -103,48 +97,42 @@ def request_login(payload: LoginRequest):
                 "message": "존재하지 않는 아이디입니다.",
                 "access_token": None,
                 "token_type": None,
+                "nickname": None,
             }
 
-        if user.password != payload.password:
+        if user.password_hash != payload.password:
             return {
                 "success": False,
                 "message": "비밀번호가 일치하지 않습니다.",
                 "access_token": None,
                 "token_type": None,
+                "nickname": None,
             }
 
-        access_token = create_access_token(
-            {
-                "user_id": user.user_id,
-                "nickname": user.nickname,
-            }
-        )
+        access_token = token_module.create_access_token({"id" : user.username, "nickname": user.nickname})
 
         return {
             "success": True,
-            "message": "로그인하셨습니다.",
-            "nickname": user.nickname,
+            "message": "로그인하셨습니다.",           
             "access_token": access_token,
             "token_type": "bearer",
+            "nickname": user.nickname,
         }
 
     finally:
         db.close()
 
 #세션용 토큰 유지
-
 @app.post("/api:8000/request_refresh")
 def request_refresh(authorization: str | None = Header(None)):
-    token = get_token_from_header(authorization)
-    payload = verify_access_token(token)
+    token_str = token_module.get_token_from_header(authorization)
+    payload = token_module.verify_access_token(token_str)
 
-    new_access_token = create_access_token(
-        {
-            "user_id": payload.get("user_id"),
-            "nickname": payload.get("nickname"),
-        }
-    )
-
+    new_access_token = token_module.create_access_token({
+        "id": payload.get("id"),
+        "nickname": payload.get("nickname"),
+    })
+  
     return {
         "success": True,
         "message": "토큰 갱신 성공",
@@ -157,11 +145,9 @@ def request_refresh(authorization: str | None = Header(None)):
 
 @app.post("/api:8000/request_logout")
 def request_logout(authorization: str | None = Header(None)):
-    token = get_token_from_header(authorization)
-    verify_access_token(token)
-
-    expired_tokens.add(token)
-
+    token_str = token_module.get_token_from_header(authorization)
+    token_module.verify_access_token(token_str)
+    token_module.add_expired_token(token_str)
     return {
         "success": True,
         "message": "로그아웃하셨습니다.",
