@@ -126,31 +126,11 @@ def get_project_by_id(db: Session, project_id: str):
     """project uid로 프로젝트 조회"""
     return db.query(models.Project).filter(models.Project.uid == project_id).first()
 
-def delete_project(db: Session, project_id: str, requester_id: str):
-    """프로젝트 삭제 (요청자가 owner인지 확인 후 삭제)"""
-    project = db.query(models.Project).filter(models.Project.uid == project_id).first()
-    
-    if project and project.creator_id == requester_id:
-        db.delete(project)
-        db.commit()
-        return True
-    return False
-
-def invite_user_to_project(db: Session, project_id: str, target_user_id: str, role: str = "member"):
-    """프로젝트 초대 기능"""
-    # 이미 멤버인지 확인
-    existing_member = db.query(models.ProjectMember).filter(
-        models.ProjectMember.project_uid == project_id,
-        models.ProjectMember.user_id == target_user_id
-    ).first()
-    
-    if existing_member:
-        return None # 이미 초대됨
-
-    db_member = models.ProjectMember(project_uid=project_id, user_id=target_user_id)
-    db.add(db_member)
+def delete_project(db: Session, project):
+    """프로젝트 삭제"""
+    db.delete(project)
     db.commit()
-    return db_member
+    return True
 
 def remove_project_member(db: Session, project_id: str, target_user_id: str):
     """프로젝트 멤버 제거 기능 (자기 자신도 제거 가능)"""
