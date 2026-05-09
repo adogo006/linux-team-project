@@ -21,12 +21,66 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 oauth2scheme = OAuth2PasswordBearer(tokenUrl="request_login")
 
-#############
-#crud부르기
 app = FastAPI(title="InsideViral API")
 
-########################
-##회원가입 등록 및 중복확인
+#현재 수정중인 사용자 추적용 메모리
+# { file_uid: { nickname: last_seen_datetime_utc } }
+editing_users = {}
+EDITING_TTL_SECONDS = 30
+
+def cleanup_editing_users():
+    """Remove stale editor entries based on heartbeat timeout."""
+    now = datetime.now(timezone.utc)
+    expired_file_ids = []
+
+    for file_uid, user_map in editing_users.items():
+        expired_nicknames = [
+            nickname
+            for nickname, last_seen in user_map.items()
+            if (now - last_seen).total_seconds() > EDITING_TTL_SECONDS
+        ]
+
+        for nickname in expired_nicknames:
+            del user_map[nickname]
+
+        if not user_map:
+            expired_file_ids.append(file_uid)
+
+    for file_uid in expired_file_ids:
+        del editing_users[file_uid]
+
+
+def get_active_editors(file_uid: str):
+    """Return current active nicknames for the file."""
+    cleanup_editing_users()
+    return list(editing_users.get(file_uid, {}).keys())
+
+
+def touch_editing_user(file_uid: str, nickname: str):
+    """Register or refresh a file editor heartbeat."""
+    cleanup_editing_users()
+    file_users = editing_users.setdefault(file_uid, {})
+    file_users[nickname] = datetime.now(timezone.utc)
+
+
+def release_editing_user(file_uid: str, nickname: str):
+    """Explicitly remove a file editor, if present."""
+    file_users = editing_users.get(file_uid)
+    if not file_users:
+        return
+
+    file_users.pop(nickname, None)
+    if not file_users:
+        editing_users.pop(file_uid, None)
+
+
+def has_other_active_editor(file_uid: str, nickname: str):
+    """Check whether another user is actively editing the file."""
+    active_editors = get_active_editors(file_uid)
+    return any(active_nickname != nickname for active_nickname in active_editors)
+
+
+#회원가입 아이디 중복 체크
 @app.post("/api:8000/request_id_check")
 def request_id_check(payload: schemas.UserIdCheckRequest):
     db = SessionLocal()
@@ -38,6 +92,7 @@ def request_id_check(payload: schemas.UserIdCheckRequest):
     finally:
         db.close()
 
+#회원가입 닉네임 중복 체크
 @app.post("/api:8000/request_nickname_check")
 def request_nickname_check(payload: schemas.NicknameCheckRequest):
     db = SessionLocal()
@@ -49,6 +104,7 @@ def request_nickname_check(payload: schemas.NicknameCheckRequest):
     finally:
         db.close()
 
+#회원가입 요청 받기
 @app.post("/api:8000/request_register")
 def request_register(payload: schemas.RequestRegister):
     db = SessionLocal()
@@ -417,8 +473,16 @@ def request_file_open(payload: schemas.RequestFileOpen, authorization: str | Non
         if not file_node or file_node.node_type != crud.models.NodeType.FILE:
             raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
 
-        # 여기서 해당 파일에 현재 작업중인 사용자가 있다고 표시하는 로직이 필요(나중에 구현)
-        
+        if has_other_active_editor(file_node.uid, user.nickname):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "다른 사용자가 수정 중입니다.",
+                    "editing_users": get_active_editors(file_node.uid),
+                },
+            )
+
+        touch_editing_user(file_node.uid, user.nickname)
 
         file_content = crud.read_file_content(db, file_node.uid)
 
@@ -433,6 +497,86 @@ def request_file_open(payload: schemas.RequestFileOpen, authorization: str | Non
                 "file_path": file_node.file_path,
                 "content": file_content,
             },
+            "editing_users": get_active_editors(file_node.uid),
+        }
+
+    finally:
+        db.close()
+
+
+#파일 편집 하트비트 갱신(프론트에서 10초마다 갱신 필요)
+@app.post("/api:8000/request_file_heartbeat")
+def request_file_heartbeat(payload: schemas.RequestFileAction, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        file_node = crud.get_file_node(db, payload.file_uid)
+
+        if not file_node or file_node.node_type != crud.models.NodeType.FILE:
+            raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+        touch_editing_user(file_node.uid, user.nickname)
+
+        return {
+            "success": True,
+            "message": "하트비트 갱신 성공",
+            "editing_users": get_active_editors(file_node.uid),
+        }
+
+    finally:
+        db.close()
+
+#파일 편집 종료(명시적 해제)
+@app.post("/api:8000/request_file_release")
+def request_file_release(payload: schemas.RequestFileAction, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        file_node = crud.get_file_node(db, payload.file_uid)
+
+        if not file_node or file_node.node_type != crud.models.NodeType.FILE:
+            raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+        release_editing_user(file_node.uid, user.nickname)
+
+        return {
+            "success": True,
+            "message": "편집 상태 해제 성공",
+            "editing_users": get_active_editors(file_node.uid),
         }
 
     finally:
@@ -535,6 +679,51 @@ def request_node_rename(payload: schemas.RequestNodeRename, authorization: str |
     finally:
         db.close()
 
+#프로젝트 이름 변경( = 루트 디렉토리 이름 변경)
+@app.post("/api:8000/request_project_rename")
+def request_project_rename(payload: schemas.RequestProjectRename, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        project = crud.get_project_by_id(db, payload.project_id)
+
+        if not project:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+
+        crud.rename_project(db, project, payload.new_name)
+
+        crud.create_project_log(
+            db=db,
+            project_id=project.uid,
+            nickname=user.nickname,
+            action="PROJECT_RENAME",
+            message=f"{user.nickname}님이 프로젝트 이름을 '{project.name}'에서 '{payload.new_name}'으로 변경했습니다.",
+        )
+
+        return {
+            "success": True,
+            "message": "프로젝트 이름 변경 성공",
+        }
+
+    finally:
+        db.close()
 
 
 

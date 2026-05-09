@@ -258,6 +258,22 @@ def rename_node(db: Session, node_id: str, new_name: str):
         return db_node
     return None
 
+def rename_project(db: Session, project, new_name: str):
+    """프로젝트 이름 변경 (프로젝트 이름과 루트 디렉토리 이름을 함께 변경)"""
+    project.name = new_name
+
+    root_node = db.query(models.FileNode).filter(
+        models.FileNode.project_uid == project.uid,
+        models.FileNode.parent_uid == None
+    ).first()
+
+    if root_node:
+        root_node.display_name = new_name
+
+    db.commit()
+    db.refresh(project)
+    return project
+
 def delete_node(db: Session, node_id: str):
     """파일 또는 디렉토리 삭제 (CASCADE로 인해 하위 폴더/파일도 자동 삭제됨)"""
     db_node = db.query(models.FileNode).filter(models.FileNode.uid == node_id).first()

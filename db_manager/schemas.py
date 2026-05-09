@@ -88,6 +88,10 @@ class RequestNodeRename(BaseModel):
     node_uid: str = Field(..., description="파일 또는 디렉토리 고유 ID")
     new_name: str = Field(..., min_length=1, max_length=100, description="새 이름")
 
+class RequestProjectRename(BaseModel):
+    project_id: str = Field(..., description="프로젝트 고유 ID")
+    new_name: str = Field(..., min_length=2, max_length=30, description="새 프로젝트 이름")
+
 class RequestFileAction(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
     file_uid: str = Field(..., description="파일 고유 ID")
