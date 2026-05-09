@@ -142,7 +142,7 @@ def request_login(payload: schemas.RequestLogin):
                 "message": "존재하지 않는 아이디입니다.",
                 "access_token": None,
                 "token_type": None,
-                "nickname": None,
+                "nickname": None
             }
 
         if user.password != payload.password:
@@ -151,28 +151,25 @@ def request_login(payload: schemas.RequestLogin):
                 "message": "비밀번호가 일치하지 않습니다.",
                 "access_token": None,
                 "token_type": None,
-                "nickname": None,
+                "nickname": None
             }
 
         access_token = token_module.create_access_token({"id": user.id, "nickname": user.nickname})
-
         return {
             "success": True,
             "message": "로그인하셨습니다.",           
             "access_token": access_token,
             "token_type": "bearer",
-            "nickname": user.nickname,
-        }
-
+            "nickname": user.nickname
+        }   
     finally:
-        db.close()
+        db.close()        
 
 #세션용 토큰 유지
 @app.post("/api:8000/request_refresh")
 def request_refresh(authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     payload = token_module.verify_access_token(token_str)
-
     new_access_token = token_module.create_access_token({
         "id": payload.get("id"),
         "nickname": payload.get("nickname"),
@@ -725,9 +722,121 @@ def request_project_rename(payload: schemas.RequestProjectRename, authorization:
     finally:
         db.close()
 
+#프로젝트에 사용자 초대
+@app.post("/api:8000/request_project_invite")
+def request_project_invite(payload: schemas.RequestProjectInvite, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
 
+    db = SessionLocal()
 
+    try:
+        inviter = crud.get_user_by_user_id(db, token_user_id)
 
+        if not inviter:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=inviter.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        target_user = crud.get_user_by_nickname(db, payload.target_nickname)
+
+        if not target_user:
+            raise HTTPException(status_code=404, detail="초대할 사용자를 찾을 수 없습니다.")
+
+        project = crud.get_project_by_id(db, payload.project_id)
+
+        if not project:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+
+        if target_user.id == project.creator_id:
+            raise HTTPException(status_code=400, detail="프로젝트 생성자는 이미 프로젝트에 속해 있습니다.")
+
+        existing_membership = crud.get_project_member(db, payload.project_id, target_user.id)
+        if existing_membership:
+            raise HTTPException(status_code=400, detail="사용자는 이미 프로젝트에 속해 있습니다.")
+
+        crud.add_project_member(db, payload.project_id, target_user.id)
+
+        crud.create_project_log(
+            db=db,
+            project_id=project.uid,
+            nickname=inviter.nickname,
+            action="PROJECT_INVITE",
+            message=f"{inviter.nickname}님이 {target_user.nickname}님을 프로젝트에 초대했습니다.",
+        )
+
+        return {
+            "success": True,
+            "message": f"{target_user.nickname}님이 프로젝트에 초대되었습니다.",
+        }
+
+    finally:
+        db.close()
+
+#프로젝트 멤버 추방
+@app.post("/api:8000/request_project_remove_member")
+def request_project_remove_member(payload: schemas.RequestProjectRemoveMember, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        requester = crud.get_user_by_user_id(db, token_user_id)
+
+        if not requester:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=requester.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        target_user = crud.get_user_by_nickname(db, payload.target_nickname)
+
+        if not target_user:
+            raise HTTPException(status_code=404, detail="추방할 사용자를 찾을 수 없습니다.")
+
+        project = crud.get_project_by_id(db, payload.project_id)
+
+        if not project:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+
+        if target_user.id == project.creator_id:
+            raise HTTPException(status_code=400, detail="프로젝트 생성자는 프로젝트에서 추방할 수 없습니다.")
+
+        existing_membership = crud.get_project_member(db, payload.project_id, target_user.id)
+        if not existing_membership:
+            raise HTTPException(status_code=400, detail="사용자는 프로젝트에 속해 있지 않습니다.")
+
+        crud.remove_project_member(db, payload.project_id, target_user.id)
+
+        crud.create_project_log(
+            db=db,
+            project_id=project.uid,
+            nickname=requester.nickname,
+            action="PROJECT_REMOVE_MEMBER",
+            message=f"{requester.nickname}님이 {target_user.nickname}님을 프로젝트에서 추방했습니다.",
+        )
+
+        return {
+            "success": True,
+            "message": f"{target_user.nickname}님이 프로젝트에서 추방되었습니다.",
+        }
+
+    finally:
+        db.close()
 
 
 

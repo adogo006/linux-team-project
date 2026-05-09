@@ -97,9 +97,8 @@ def get_projects_by_user_id(db: Session, user_id: str):
     return get_project_list_by_user(db, user_id)
 
 
-def add_project_member(db: Session, project_id: str, user_id: str, role: str = "member"):
+def add_project_member(db: Session, project_id: str, user_id: str):
     """프로젝트 멤버 추가 (role은 호환용 파라미터로만 받음)."""
-    _ = role
     db_member = models.ProjectMember(project_uid=project_id, user_id=user_id)
     db.add(db_member)
     db.commit()
@@ -145,11 +144,23 @@ def invite_user_to_project(db: Session, project_id: str, target_user_id: str, ro
     if existing_member:
         return None # 이미 초대됨
 
-    _ = role
     db_member = models.ProjectMember(project_uid=project_id, user_id=target_user_id)
     db.add(db_member)
     db.commit()
     return db_member
+
+def remove_project_member(db: Session, project_id: str, target_user_id: str):
+    """프로젝트 멤버 제거 기능 (자기 자신도 제거 가능)"""
+    member = db.query(models.ProjectMember).filter(
+        models.ProjectMember.project_uid == project_id,
+        models.ProjectMember.user_id == target_user_id
+    ).first()
+    
+    if member:
+        db.delete(member)
+        db.commit()
+        return True
+    return False
 
 # ==========================================
 # 3. 파일 및 폴더 (FileNode) 관련 함수
