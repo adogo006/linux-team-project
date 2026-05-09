@@ -86,6 +86,14 @@ class RequestDirectoryCreate(BaseModel):
     directory_name: str = Field(..., min_length=1, max_length=100, description="디렉토리 이름")
     parent_node_id: Optional[str] = Field(None, description="부모 노드 ID (루트 디렉토리인 경우 None)")
 
+class RequestFileDelete(BaseModel):
+    project_id: str = Field(..., description="프로젝트 고유 ID")
+    file_uid: str = Field(..., description="파일 고유 ID")
+
+class RequestDirectoryDelete(BaseModel):
+    project_id: str = Field(..., description="프로젝트 고유 ID")
+    directory_uid: str = Field(..., description="디렉토리 고유 ID")
+
 class RequestFileSave(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
     file_uid: str = Field(..., description="파일 고유 ID")

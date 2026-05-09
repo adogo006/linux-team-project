@@ -199,6 +199,22 @@ def get_project_nodes(db: Session, project_id: str):
     """프로젝트 내의 모든 파일/폴더 구조 가져오기 (프로젝트 Open 시 사용)"""
     return db.query(models.FileNode).filter(models.FileNode.project_uid == project_id).all()
 
+def get_descendant_file_nodes(db: Session, node_id: str):
+    """특정 노드의 모든 하위 파일 노드(재귀적으로) 조회"""
+    descendant_files = []
+    nodes_to_visit = [node_id]
+
+    while nodes_to_visit:
+        current_node_id = nodes_to_visit.pop()
+        child_nodes = db.query(models.FileNode).filter(models.FileNode.parent_uid == current_node_id).all()
+        
+        for child in child_nodes:
+            if child.node_type == models.NodeType.FILE:
+                descendant_files.append(child)
+            elif child.node_type == models.NodeType.DIRECTORY:
+                nodes_to_visit.append(str(child.uid))
+
+    return descendant_files
 
 def get_project_file_tree(db: Session, project_id: str):
     """프로젝트 파일 트리를 중첩 구조로 반환 (웹 UI용 - 왼쪽 폴더 패널)"""
@@ -261,6 +277,12 @@ def save_file_content(db: Session, file_id: str, content: str):
     file_path = Path(file_node.file_path)
     file_path.write_text(content, encoding="utf-8")
     return True
+
+def delete_file_data(file_path: str):
+    """파일 노드가 가리키는 실제 파일 삭제 (노드 삭제 시 호출)"""
+    path = Path(file_path)
+    if path.exists():
+        path.unlink()
 
 def rename_node(db: Session, node_id: str, new_name: str):
     """파일/디렉토리 이름 변경"""

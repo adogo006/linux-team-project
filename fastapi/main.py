@@ -885,7 +885,176 @@ def request_project_members(payload: schemas.RequestProjectMembers, authorizatio
     finally:
         db.close()
 
+#프로젝트 삭제
+@app.post("/api:8000/request_project_delete")
+def request_project_delete(payload: schemas.RequestProjectOpen, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
 
+    db = SessionLocal()
 
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
 
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
 
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        project = crud.get_project_by_id(db, payload.project_id)
+
+        if not project:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+
+        if project.creator_id != user.id:
+            raise HTTPException(status_code=403, detail="프로젝트 삭제는 생성자만 가능합니다.")
+
+        cleanup_editing_users()
+        nodes = crud.get_project_nodes(db, payload.project_id)
+        for node in nodes:
+            if node.uid in editing_users:
+                return {
+                    "success": False,
+                    "message": "해당 프로젝트에서 편집 중인 사용자가 존재합니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
+                }
+
+        # 프로젝트에 속한 모든 데이터 파일 삭제
+        for node in nodes:
+            if node.node_type == crud.models.NodeType.FILE:
+                crud.delete_file_data(node.file_path)
+
+        crud.delete_project(db, project)
+
+        return {
+            "success": True,
+            "message": "프로젝트가 삭제되었습니다.",
+        }
+
+    finally:
+        db.close()
+
+#파일 삭제
+@app.post("/api:8000/request_file_delete")
+def request_file_delete(payload: schemas.RequestFileDelete, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        node = crud.get_file_node(db, payload.file_uid)
+
+        if not node:
+            raise HTTPException(status_code=404, detail="노드를 찾을 수 없습니다.")
+
+        cleanup_editing_users()
+        if node.node_type == crud.models.NodeType.FILE and has_other_active_editor(node.uid, user.nickname):
+            return{
+                "success": False,
+                "message": "해당 파일에서 다른 사용자가 수정 중입니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
+                "editing_users": get_active_editors(node.uid),
+            }
+
+        crud.delete_file_data(node.file_path)
+        crud.delete_node(db, node)
+
+        crud.create_project_log(
+            db=db,
+            project_id=payload.project_id,
+            nickname=user.nickname,
+            action="NODE_DELETE",
+            message=f"{user.nickname}님이 파일 '{node.display_name}'을 삭제했습니다.",
+            target_node_id=node.uid
+        )
+
+        return {
+            "success": True,
+            "message": "파일이 삭제되었습니다.",
+        }
+
+    finally:
+        db.close()
+
+#디렉토리 삭제
+@app.post("/api:8000/request_directory_delete")
+def request_directory_delete(payload: schemas.RequestDirectoryDelete, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        node = crud.get_file_node(db, payload.node_uid)
+
+        if not node:
+            raise HTTPException(status_code=404, detail="노드를 찾을 수 없습니다.")
+
+        if node.node_type != crud.models.NodeType.DIRECTORY:
+            raise HTTPException(status_code=400, detail="노드가 디렉토리가 아닙니다.")
+
+        # 디렉토리 내 모든 파일에 대해 편집 중인 사용자가 있는지 확인
+        descendant_file_nodes = crud.get_descendant_file_nodes(db, node.uid)
+        cleanup_editing_users()
+        for file in descendant_file_nodes:
+            if has_other_active_editor(file.uid, user.nickname):
+                return {
+                    "success": False,
+                    "message": f"디렉토리 내 파일 '{file.display_name}'에서 다른 사용자가 수정 중입니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
+                    "editing_users": get_active_editors(file.uid),
+                }
+
+        for file in descendant_file_nodes:
+            crud.delete_file_data(file.file_path)
+        crud.delete_node(db, node)
+
+        crud.create_project_log(
+            db=db,
+            project_id=payload.project_id,
+            nickname=user.nickname,
+            action="NODE_DELETE",
+            message=f"{user.nickname}님이 디렉토리 '{node.display_name}'을 삭제했습니다.",
+            target_node_id=node.uid
+        )
+
+        return {
+            "success": True,
+            "message": "디렉토리가 삭제되었습니다.",
+        }
+
+    finally:
+        db.close()
