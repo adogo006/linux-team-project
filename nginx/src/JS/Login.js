@@ -38,8 +38,8 @@ async function handleLogin() {
   try {
     const token = await request_login(id, pw);
 
-    // 토큰 sessionStorage 저장
-    sessionStorage.setItem("token", token);
+    // JWT 토큰 sessionStorage 저장
+    sessionStorage.setItem("access_token", token);
 
     status.textContent = "✓ 로그인 성공";
     status.className = "status success";
