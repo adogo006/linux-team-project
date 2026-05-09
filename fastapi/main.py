@@ -24,7 +24,7 @@ oauth2scheme = OAuth2PasswordBearer(tokenUrl="request_login")
 app = FastAPI(title="InsideViral API")
 
 #현재 수정중인 사용자 추적용 메모리
-# { file_uid: { nickname: last_seen_datetime_utc } }
+#{ file_uid: { nickname: last_seen_datetime_utc } }
 editing_users = {}
 EDITING_TTL_SECONDS = 30
 
@@ -863,6 +863,9 @@ def request_project_members(payload: schemas.RequestProjectMembers, authorizatio
 
         members = crud.get_project_members(db, payload.project_id)
 
+        # 편집 중인 사용자 정보 미리 정리
+        cleanup_editing_users()
+
         return {
             "success": True,
             "message": "프로젝트 멤버 목록 조회 성공",
@@ -871,6 +874,9 @@ def request_project_members(payload: schemas.RequestProjectMembers, authorizatio
                     "user_id": member.user.id,
                     "nickname": member.user.nickname,
                     "is_creator": member.user.id == crud.get_project_by_id(db, payload.project_id).creator_id,
+                    "is_editing": any(
+                        member.user.nickname in editors for editors in editing_users.values()
+                    ),
                 }
                 for member in members
             ],
