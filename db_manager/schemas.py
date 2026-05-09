@@ -30,7 +30,6 @@ class ResponseLogin(BaseModel):
 
 class RequestProjectCreate(BaseModel):
     project_name: str = Field(..., min_length=2, max_length=30, description="프로젝트 이름")
-    creator_nickname: str = Field(..., description="생성자 닉네임")
 
 class RequestProjectRemove(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
@@ -43,7 +42,6 @@ class RequestProjectInvite(BaseModel):
 
 class RequestProjectOpen(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
-    user_nickname: str = Field(..., description="프로젝트를 열려는 사용자 닉네임")
 
 
 class RequestProjectList(BaseModel):

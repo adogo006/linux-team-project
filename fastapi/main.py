@@ -142,10 +142,15 @@ def request_logout(authorization: str | None = Header(None)):
 
 #프로젝트 목록 조회
 @app.post("/api:8000/request_project_list")
-def request_project_list(payload: schemas.RequestProjectList):
+def request_project_list(authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+    token_nickname = token_payload.get("nickname")
+
     db = SessionLocal()
     try:
-        user = crud.get_user_by_nickname(db, payload.nickname)
+        user = crud.get_user_by_user_id(db, token_user_id)
         
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
@@ -154,13 +159,15 @@ def request_project_list(payload: schemas.RequestProjectList):
 
         return {
             "success": True,
-            "message": "프로젝트 목록 조회 성공",
+            "message": f"{token_nickname}님의 프로젝트 목록 조회 성공",
+            "nickname": token_nickname,
+            "user_id": token_user_id,
             "projects": [
                 {
                     "project_id": project.uid,
                     "project_name": project.name,
-                    "owner_id": project.creator_id,
-                    "invited_users": [member.user.nickname for member in project.members if member.user_id != project.creator_id],
+                    "owner_nickname": project.creator.nickname,
+                    "invited_users_nickname": [member.user.nickname for member in project.members if member.user_id != project.creator_id],
                 }
                 for project in projects
             ],
@@ -171,10 +178,13 @@ def request_project_list(payload: schemas.RequestProjectList):
 
 #새 프로젝트 생성
 @app.post("/api:8000/request_project_create")
-def request_project_create(payload: schemas.RequestProjectCreate):
+def request_project_create(payload: schemas.RequestProjectCreate, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+
     db = SessionLocal()
     try:
-        owner = crud.get_user_by_nickname(db, payload.creator_nickname)
+        owner = crud.get_user_by_user_id(db, token_payload.get("id"))
 
         if not owner:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
@@ -184,6 +194,7 @@ def request_project_create(payload: schemas.RequestProjectCreate):
             project_name=payload.project_name,
             creator_id=owner.id,
         )
+
 
         crud.create_project_log(
             db=db,
@@ -199,23 +210,24 @@ def request_project_create(payload: schemas.RequestProjectCreate):
             "project": {
                 "project_id": project.uid,
                 "project_name": project.name,
-                "owner_nickname": owner.nickname,
+                "owner_nickname": token_payload.get("nickname"),
             },
         }
 
     finally:
         db.close()
 
-#사용자 참여 API불러오기
-
-
 #프로젝트 오픈
 @app.post("/api:8000/request_project_open")
-def request_project_open(payload: schemas.RequestProjectOpen):
+def request_project_open(payload: schemas.RequestProjectOpen, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
     db = SessionLocal()
 
     try:
-        user = crud.get_user_by_nickname(db, payload.user_nickname)
+        user = crud.get_user_by_user_id(db, token_user_id)
 
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
@@ -225,7 +237,6 @@ def request_project_open(payload: schemas.RequestProjectOpen):
             project_id=payload.project_id,
             user_id=user.id,
         )
-
         if not is_member:
             raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
 
@@ -234,8 +245,23 @@ def request_project_open(payload: schemas.RequestProjectOpen):
         if not project:
             raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
 
+        # 프로젝트에 속하는 모든 파일노드를 트리 구조로 반환 (왼쪽 폴더 패널용)
         file_tree = crud.get_project_file_tree(db, payload.project_id)
-        logs = crud.get_project_logs(db, payload.project_id)
+
+        raw_logs = crud.get_project_logs(db, payload.project_id)
+        logs = []
+
+        for log in raw_logs:
+            raw_node = crud.get_file_node(db, log.target_node_uid) if log.target_node_uid else None
+            logs.append({
+                "log_id": str(log.uid),
+                "user_nickname": log.user.nickname if log.user else "알 수 없음",
+                "action_type": log.action_type,
+                "message": log.message,
+                "timestamp": log.created_at.isoformat(),
+                "target_node_name": raw_node.display_name if raw_node else None,
+            })
+
 
         return {
             "success": True,

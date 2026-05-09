@@ -68,6 +68,15 @@ def create_project(db: Session, project_name: str, creator_id: str):
     )
     db.add(db_member)
     db.commit()
+
+    # 3. 생성된 프로젝트의 루트디렉토리 생성
+    create_file_node(
+        db=db,
+        project_id=db_project.uid,
+        name=project_name,
+        node_type=models.NodeType.DIRECTORY,
+        parent_id=None,
+    )
     
     return db_project
 
@@ -165,24 +174,42 @@ def get_project_nodes(db: Session, project_id: str):
 
 
 def get_project_file_tree(db: Session, project_id: str):
-    """프로젝트 파일 트리를 단순 리스트 형태로 반환"""
+    """프로젝트 파일 트리를 중첩 구조로 반환 (웹 UI용 - 왼쪽 폴더 패널)"""
     nodes = get_project_nodes(db, project_id)
-    return [
-        {
+    
+    # uid -> 노드 딕셔너리 맵 생성
+    node_map = {}
+    root_nodes = []
+    
+    for node in nodes:
+        node_dict = {
             "id": str(node.uid),
-            "parent_id": str(node.parent_uid) if node.parent_uid else None,
             "name": node.display_name,
             "type": node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type),
             "path": node.file_path,
+            "children": [],
         }
-        for node in nodes
-    ]
+        # uid를 키로 하는 딕셔너리 값을 가지는 딕셔너리
+        node_map[str(node.uid)] = node_dict
+        
+        # 부모가 없으면 루트 노드
+        if node.parent_uid is None:
+            root_nodes.append(node_dict)
+    
+    # 부모-자식 관계 연결
+    for node in nodes:
+        if node.parent_uid is not None:
+            parent_id = str(node.parent_uid)
+            if parent_id in node_map:
+                node_map[parent_id]["children"].append(node_map[str(node.uid)])
+    
+    return root_nodes
 
-def get_file_content(db: Session, file_id: str):
-    """단일 파일 내용 조회 (파일 열기)"""
+
+def get_file_node(db: Session, file_id: str):
+    """단일 파일 조회"""
     return db.query(models.FileNode).filter(
-        models.FileNode.uid == file_id,
-        models.FileNode.node_type == models.NodeType.FILE
+        models.FileNode.uid == file_id
     ).first()
 
 def update_file_content(db: Session, file_id: str, new_content: str):
