@@ -82,18 +82,15 @@ class RequestFileSave(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
     file_uid: str = Field(..., description="파일 고유 ID")
     content: str = Field(..., description="저장할 파일 내용")
-    user_nickname: str = Field(..., description="저장하는 사용자 닉네임")
+
+class RequestNodeRename(BaseModel):
+    project_id: str = Field(..., description="프로젝트 고유 ID")
+    node_uid: str = Field(..., description="파일 또는 디렉토리 고유 ID")
+    new_name: str = Field(..., min_length=1, max_length=100, description="새 이름")
 
 class RequestFileAction(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
     file_uid: str = Field(..., description="파일 고유 ID")
-    user_nickname: str = Field(..., description="요청하는 사용자 닉네임")
-
-class RequestFileRename(BaseModel):
-    project_id: str = Field(..., description="프로젝트 고유 ID")
-    old_path: str = Field(..., description="기존 파일 경로")
-    new_path: str = Field(..., description="새로운 파일 경로")
-    user_nickname: str = Field(..., description="요청하는 사용자 닉네임")
 
 # 디렉토리 관련 스키마
 class RequestDirectoryAction(BaseModel):

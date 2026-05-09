@@ -437,3 +437,112 @@ def request_file_open(payload: schemas.RequestFileOpen, authorization: str | Non
 
     finally:
         db.close()
+
+#파일 저장
+@app.post("/api:8000/request_file_save")
+def request_file_save(payload: schemas.RequestFileSave, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        file_node = crud.get_file_node(db, payload.file_uid)
+
+        if not file_node or file_node.node_type != crud.models.NodeType.FILE:
+            raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+        is_saved = crud.save_file_content(db, file_node.uid, payload.content)
+
+        if not is_saved:
+            raise HTTPException(status_code=500, detail="파일 저장에 실패했습니다.")
+
+        crud.create_project_log(
+            db=db,
+            project_id=payload.project_id,
+            nickname=user.nickname,
+            action="FILE_SAVE",
+            message=f"{user.nickname}님이 파일 '{file_node.display_name}'을 저장했습니다.",
+            target_node_id=file_node.uid
+        )
+
+        return {
+            "success": True,
+            "message": "파일 저장 성공",
+        }
+
+    finally:
+        db.close()
+
+#디스플레이 이름 변경 (파일/디렉토리 공통)
+@app.post("/api:8000/request_node_rename")
+def request_node_rename(payload: schemas.RequestNodeRename, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        node = crud.get_file_node(db, payload.node_id)
+
+        if not node:
+            raise HTTPException(status_code=404, detail="노드를 찾을 수 없습니다.")
+
+        crud.rename_node(db, node.uid, payload.new_name)
+
+        crud.create_project_log(
+            db=db,
+            project_id=payload.project_id,
+            nickname=user.nickname,
+            action="NODE_RENAME",
+            message=f"{user.nickname}님이 노드 '{node.display_name}'의 이름을 '{payload.new_name}'으로 변경했습니다.",
+            target_node_id=node.uid
+        )
+
+        return {
+            "success": True,
+            "message": "노드 이름 변경 성공",
+        }
+
+    finally:
+        db.close()
+
+
+
+
+
+
+
+
+
+
+
+

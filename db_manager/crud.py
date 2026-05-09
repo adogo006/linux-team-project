@@ -238,19 +238,15 @@ def read_file_content(db: Session, file_id: str) -> str:
 
     return file_path.read_text(encoding="utf-8")
 
-def update_file_content(db: Session, file_id: str, new_content: str):
-    """파일 내용 저장"""
-    db_file = db.query(models.FileNode).filter(
-        models.FileNode.uid == file_id,
-        models.FileNode.node_type == models.NodeType.FILE
-    ).first()
-    
-    if db_file:
-        db_file.file_path = new_content
-        db.commit()
-        db.refresh(db_file)
-        return db_file
-    return None
+def save_file_content(db: Session, file_id: str, content: str):
+    """파일 노드가 가리키는 실제 파일에 문자 내용을 저장한다."""
+    file_node = get_file_node(db, file_id)
+    if not file_node or not file_node.file_path:
+        return False
+
+    file_path = Path(file_node.file_path)
+    file_path.write_text(content, encoding="utf-8")
+    return True
 
 def rename_node(db: Session, node_id: str, new_name: str):
     """파일/디렉토리 이름 변경"""
