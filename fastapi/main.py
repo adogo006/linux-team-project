@@ -25,7 +25,6 @@ oauth2scheme = OAuth2PasswordBearer(tokenUrl="request_login")
 
 #############
 #crud부르기
-
 app = FastAPI(title="InsideViral API")
 
 ########################
@@ -140,9 +139,7 @@ def request_refresh(authorization: str | None = Header(None)):
         "token_type": "bearer",
     }
 
-
 #토큰 만료 및 유지 기능 로그아웃
-
 @app.post("/api:8000/request_logout")
 def request_logout(authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
@@ -153,14 +150,10 @@ def request_logout(authorization: str | None = Header(None)):
         "message": "로그아웃하셨습니다.",
     }
 
-
-
-
 #새 프로젝트 생성
 @app.post("/api:8000/request_project_create")
 def request_project_create(payload: ProjectCreateRequest):
     db = SessionLocal()
-
     try:
         owner = crud.get_user_by_nickname(db, payload.owner_nickname)
 
@@ -201,15 +194,13 @@ def request_project_create(payload: ProjectCreateRequest):
     finally:
         db.close()
 
-
 #사용자 참여 API불러오기
 @app.post("/api:8000/request_project_list")
 def request_project_list(payload: ProjectListRequest):
     db = SessionLocal()
-
     try:
         user = crud.get_user_by_nickname(db, payload.nickname)
-
+        
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
 
