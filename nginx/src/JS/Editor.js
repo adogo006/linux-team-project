@@ -6,18 +6,18 @@
 // const params = new URLSearchParams(window.location.search);
 // const projectId = params.get('id');
 
-const currentUser = { username: "KYJ", nickname: "김영준", role: "owner" };
+const currentUser = { username: "dev_user", nickname: "개발자", role: "owner" };
 // role: 'owner' | 'leader' | 'member'
 
 const projectInfo = { id: 1, name: "Auth Service" };
 
 const members = [
-  { username: "KYJ", nickname: "김영준", role: "owner" },
-  { username: "K", nickname: "김경운", role: "leader" },
-  { username: "W", nickname: "원미혜", role: "leader" },
-  { username: "C", nickname: "추송주", role: "leader" },
-  { username: "test", nickname: "Tester", role: "member" },
-  { username: "abc", nickname: "ABC123", role: "member" },
+  { username: "dev_user", nickname: "개발자", role: "owner" },
+  { username: "alice", nickname: "Alice", role: "leader" },
+  { username: "bob", nickname: "Bob", role: "leader" },
+  { username: "charlie", nickname: "Charlie", role: "member" },
+  { username: "dana", nickname: "Dana", role: "member" },
+  { username: "evan", nickname: "Evan", role: "member" },
 ];
 
 // 파일 트리 구조
@@ -35,7 +35,7 @@ const fileTree = [
           {
             type: "file",
             name: "AuthController.java",
-            editingBy: "김경운",
+            editingBy: "alice",
             access: ["dev_user", "alice", "bob"],
           },
           {
@@ -81,7 +81,7 @@ const fileTree = [
       {
         type: "file",
         name: "application.yml",
-        editingBy: "원미혜",
+        editingBy: "bob",
         access: ["dev_user", "alice", "bob", "charlie"],
       },
     ],

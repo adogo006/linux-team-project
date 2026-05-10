@@ -1,44 +1,109 @@
 // ── project.js ──
 
-// ── 임시 데이터 (API 연결 전 Mock) ──────────────────────────
-const currentUser = { username: "KYJ", nickname: "김" };
+const API_BASE = "http://YOUR_API_URL"; // TODO: API URL 확정되면 교체
 
-let myProjects = [
-  {
-    id: 1,
-    name: "Auth Service",
-    owner: "Root",
-    description: "사용자 인증 및 JWT 토큰 발급을 담당하는 MSA 인증 서비스",
-  },
-  {
-    id: 2,
-    name: "API Gateway",
-    owner: "MH",
-    description: "각 마이크로서비스로의 라우팅 및 로드밸런싱 처리 게이트웨이",
-  },
-  {
-    id: 3,
-    name: "Frontend UI",
-    owner: "Ch",
-    description: "CodeSync 웹 클라이언트 — React 기반 실시간 협업 에디터 UI",
-  },
-];
+// ── API 함수 ──────────────────────────────────────────────────
 
-let invites = [
-  { id: 101, projectName: "Data Pipeline", fromUser: "김경운" },
-  { id: 102, projectName: "ML Model Server", fromUser: "원미혜" },
-  { id: 103, projectName: "Tester", fromUser: "추송주" },
-];
+// 프로젝트 목록 조회
+async function request_get_projects(token) {
+  const res = await fetch(`${API_BASE}/api/projects`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) throw new Error("FETCH_FAILED");
+  return await res.json(); // [{ id, name, owner }, ...]
+}
+
+// 프로젝트 생성
+async function request_create_project(token, name) {
+  const res = await fetch(`${API_BASE}/api/projects`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error("CREATE_FAILED");
+  return await res.json(); // { id, name, owner }
+}
+
+// 초대 목록 조회
+async function request_get_invites(token) {
+  const res = await fetch(`${API_BASE}/api/invites`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) throw new Error("FETCH_FAILED");
+  return await res.json(); // [{ inviterId, projectId, projectName }, ...]
+}
+
+// 초대 수락/거절
+async function request_respond_invite(token, inviterId, projectId, accept) {
+  const res = await fetch(`${API_BASE}/api/invites/respond`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ inviterId, projectId, accept }),
+  });
+  if (!res.ok) throw new Error("RESPOND_FAILED");
+}
+
+// ── 상태 ─────────────────────────────────────────────────────
+let myProjects = [];
+let invites = [];
 
 // ── 초기화 ────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("nav-username").textContent = currentUser.username;
-  document.getElementById("nav-avatar").textContent = getInitials(
-    currentUser.nickname,
-  );
-  renderProjects();
-  renderInvites();
+document.addEventListener("DOMContentLoaded", async () => {
+  const token = sessionStorage.getItem("access_token");
+
+  // 토큰 없으면 로그인 페이지로
+  if (!token) {
+    window.location.href = "Login.html";
+    return;
+  }
+
+  // JWT payload 디코딩해서 닉네임 표시
+  // TODO: API 팀원과 payload 필드명 확인 (nickname or username)
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const nickname = payload.nickname || payload.username || "";
+    document.getElementById("nav-username").textContent = nickname;
+    document.getElementById("nav-avatar").textContent = getInitials(nickname);
+  } catch (e) {
+    document.getElementById("nav-username").textContent = "";
+  }
+
+  await loadProjects(token);
+  await loadInvites(token);
 });
+
+// ── 데이터 로드 ───────────────────────────────────────────────
+async function loadProjects(token) {
+  try {
+    myProjects = await request_get_projects(token);
+    renderProjects();
+  } catch (e) {
+    console.error("프로젝트 목록 로드 실패:", e);
+  }
+}
+
+async function loadInvites(token) {
+  try {
+    invites = await request_get_invites(token);
+    renderInvites();
+  } catch (e) {
+    console.error("초대 목록 로드 실패:", e);
+  }
+}
 
 // ── 프로젝트 렌더링 ───────────────────────────────────────────
 function renderProjects() {
@@ -52,7 +117,6 @@ function renderProjects() {
     <div class="project-card" style="animation-delay:${i * 0.06}s" onclick="openProject(${p.id})">
       <div class="project-info">
         <div class="project-name">${escHtml(p.name)}</div>
-        <div class="project-desc">${escHtml(p.description || "설명 없음")}</div>
       </div>
       <div class="project-meta">
         <div class="project-owner">
@@ -75,7 +139,7 @@ function renderProjects() {
   grid.innerHTML = cards + addBtn;
 }
 
-// ── 초대목록 렌더링 ───────────────────────────────────────────
+// ── 초대 목록 렌더링 ──────────────────────────────────────────
 function renderInvites() {
   const list = document.getElementById("invite-list");
   const badge = document.getElementById("invite-count");
@@ -89,12 +153,12 @@ function renderInvites() {
   list.innerHTML = invites
     .map(
       (inv, i) => `
-    <div class="invite-card" style="animation-delay:${i * 0.08}s" id="invite-${inv.id}">
+    <div class="invite-card" style="animation-delay:${i * 0.08}s" id="invite-${inv.projectId}">
       <div class="invite-project">${escHtml(inv.projectName)}</div>
-      <div class="invite-from">from <span>@${escHtml(inv.fromUser)}</span></div>
+      <div class="invite-from">from <span>@${escHtml(inv.inviterId)}</span></div>
       <div class="invite-actions">
-        <button class="btn-accept"  onclick="respondInvite(${inv.id}, true)">수락</button>
-        <button class="btn-decline" onclick="respondInvite(${inv.id}, false)">거절</button>
+        <button class="btn-accept"  onclick="respondInvite('${inv.inviterId}', ${inv.projectId}, true)">수락</button>
+        <button class="btn-decline" onclick="respondInvite('${inv.inviterId}', ${inv.projectId}, false)">거절</button>
       </div>
     </div>
   `,
@@ -103,32 +167,27 @@ function renderInvites() {
 }
 
 // ── 초대 수락 / 거절 ──────────────────────────────────────────
-async function respondInvite(inviteId, accept) {
-  const inv = invites.find((i) => i.id === inviteId);
-  if (!inv) return;
+async function respondInvite(inviterId, projectId, accept) {
+  const token = sessionStorage.getItem("access_token");
+  const card = document.getElementById(`invite-${projectId}`);
+
+  // 버튼 비활성화 (중복 클릭 방지)
+  if (card) card.querySelectorAll("button").forEach((b) => (b.disabled = true));
 
   try {
-    // TODO: API 연결
-    // await fetch(`http://YOUR_API_URL/api/invites/${inviteId}/respond`, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ accept })
-    // });
+    await request_respond_invite(token, inviterId, projectId, accept);
 
-    // [DEV] Mock 처리
-    if (accept) {
-      myProjects.push({
-        id: Date.now(),
-        name: inv.projectName,
-        owner: inv.fromUser,
-        description: "",
-      });
-    }
-    invites = invites.filter((i) => i.id !== inviteId);
-    renderProjects();
+    // 목록에서 제거
+    invites = invites.filter((i) => i.projectId !== projectId);
+
+    // 수락이면 프로젝트 목록 다시 로드
+    if (accept) await loadProjects(token);
+
     renderInvites();
   } catch (e) {
-    console.error("[DEV] API 미연결:", e);
+    console.error("초대 응답 실패:", e);
+    if (card)
+      card.querySelectorAll("button").forEach((b) => (b.disabled = false));
   }
 }
 
@@ -152,8 +211,8 @@ function handleOverlayClick(e) {
 
 // ── 프로젝트 생성 ─────────────────────────────────────────────
 async function createProject() {
+  const token = sessionStorage.getItem("access_token");
   const name = document.getElementById("proj-name").value.trim();
-  const desc = document.getElementById("proj-desc").value.trim();
   const status = document.getElementById("modal-status");
 
   if (!name) {
@@ -166,28 +225,15 @@ async function createProject() {
   status.className = "modal-status";
 
   try {
-    // TODO: API + DB 연결
-    // const res = await fetch('http://YOUR_API_URL/api/projects', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ name, description: desc, owner: currentUser.username })
-    // });
-    // const data = await res.json();
-
-    // [DEV] Mock 처리
-    myProjects.push({
-      id: Date.now(),
-      name,
-      description: desc,
-      owner: currentUser.username,
-    });
+    const newProject = await request_create_project(token, name);
+    myProjects.push(newProject);
 
     status.textContent = "✓ 프로젝트가 생성되었습니다!";
     status.className = "modal-status success";
     renderProjects();
     setTimeout(closeModal, 1000);
   } catch (e) {
-    status.textContent = "[DEV] API 미연결 상태입니다.";
+    status.textContent = "프로젝트 생성에 실패했습니다. 다시 시도해주세요.";
     status.className = "modal-status error";
   }
 }
