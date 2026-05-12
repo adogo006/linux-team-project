@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 from db_manager import crud, schemas
 from db_manager.db_handler import SessionLocal
-import token as token_module
+import my_token as token_module
 
 import os
 import uuid

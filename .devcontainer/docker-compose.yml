@@ -11,7 +11,7 @@ services:
     networks:
       - linux-project-net
     volumes:
-      - postgres-data:/var/lib/postgresql/data # 데이터 보존을 위한 볼륨
+      - postgres-linux-team-data:/var/lib/postgresql/data # 데이터 보존을 위한 볼륨
 
   api:
     build:
@@ -21,7 +21,6 @@ services:
       - .env
     volumes:
       - ..:/workspaces:cached
-      - ../user_uploads:/user_uploads:cached  # 파일 업로드를 위한 볼륨
     working_dir: /workspaces/fastapi
     environment:
       - PYTHONPATH=/workspaces         # 중요! /workspaces를 탐색 경로에 추가
@@ -38,7 +37,6 @@ services:
       - .env
     volumes:
       - ..:/workspaces:cached       # 전체 프로젝트 루트 공유
-      - ../user_uploads:/user_uploads:cached  # 파일 업로드를 위한 볼륨
     working_dir: /workspaces/nginx   # 컨테이너 시작 시 크롤러 폴더에서 시작
     environment:
       - PYTHONPATH=/workspaces         # 중요! /workspaces를 탐색 경로에 추가
@@ -48,7 +46,7 @@ services:
       - db
   
 volumes:
-  postgres-data:
+  postgres-linux-team-data:
 
 networks:
   linux-project-net:
