@@ -11,7 +11,7 @@ services:
     networks:
       - linux-project-net
     volumes:
-      - postgres-data:/var/lib/postgresql/data # 데이터 보존을 위한 볼륨
+      - postgres-linux-team-data:/var/lib/postgresql/data # 데이터 보존을 위한 볼륨
 
   api:
     build:
@@ -46,7 +46,7 @@ services:
       - db
   
 volumes:
-  postgres-data:
+  postgres-linux-team-data:
 
 networks:
   linux-project-net:

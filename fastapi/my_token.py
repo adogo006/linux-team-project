@@ -1,5 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from jose import jwt, JWTError
+from jose import ExpiredSignatureError
+from fastapi import HTTPException
 import os
 
 SECRET_KEY = os.getenv("SECRET_KEY", "temporary-secret-key")
@@ -13,22 +15,16 @@ expired_tokens: set = set()
 def get_token_from_header(authorization_header: str | None) -> str:
     """Extract bearer token string from `Authorization` header value.
 
-    Returns the token string or raises ValueError when header is missing/invalid.
+    Returns the token string or raises HTTPException(401) when header is missing/invalid.
     """
     if not authorization_header:
-        raise ValueError("Authorization header missing")
+        raise HTTPException(status_code=401, detail="Authorization header missing")
 
     parts = authorization_header.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise ValueError("Invalid authorization header format")
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
 
     return parts[1]
-
-
-from fastapi import HTTPException
-from jose import ExpiredSignatureError
-
-
 def verify_access_token(token: str) -> dict:
     """Verify JWT and check blacklist. Returns payload dict or raises HTTPException.
 

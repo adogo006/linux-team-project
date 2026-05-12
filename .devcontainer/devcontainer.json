@@ -5,11 +5,11 @@
   "runServices": ["db", "nginx", "api"], // 다른 컨테이너들은 백그라운드로 실행
   "workspaceFolder": "/workspaces",
   "features": {
-    "ghcr.io/devcontainers/features/common-utils:1": {
+    "ghcr.io/devcontainers/features/common-utils:2.5.7": {
       "configureZshAsDefaultShell": true
     }, // 공통 유틸리티 
     "ghcr.io/devcontainers/features/git:1": "latest", // Git 설치
-    "ghcr.io/devcontainers/features/node:1": {
+    "ghcr.io/devcontainers/features/node:2.0.0": {
         "version": "latest"
     }, // Node.js 설치
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
