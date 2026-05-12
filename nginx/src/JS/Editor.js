@@ -1,26 +1,17 @@
 // ── editor.js ──
 
 // ── Mock 데이터 ───────────────────────────────────────────────
-
-// URL에서 projectId 파싱 (추후 API 연동 시 사용)
-// const params = new URLSearchParams(window.location.search);
-// const projectId = params.get('id');
-
 const currentUser = { username: "dev_user", nickname: "개발자", role: "owner" };
-// role: 'owner' | 'leader' | 'member'
-
 const projectInfo = { id: 1, name: "Auth Service" };
 
 const members = [
   { username: "dev_user", nickname: "개발자", role: "owner" },
-  { username: "alice", nickname: "Alice", role: "leader" },
-  { username: "bob", nickname: "Bob", role: "leader" },
+  { username: "alice", nickname: "Alice", role: "member" },
+  { username: "bob", nickname: "Bob", role: "member" },
   { username: "charlie", nickname: "Charlie", role: "member" },
   { username: "dana", nickname: "Dana", role: "member" },
-  { username: "evan", nickname: "Evan", role: "member" },
 ];
 
-// 파일 트리 구조
 const fileTree = [
   {
     type: "folder",
@@ -32,24 +23,9 @@ const fileTree = [
         name: "auth",
         open: true,
         children: [
-          {
-            type: "file",
-            name: "AuthController.java",
-            editingBy: "alice",
-            access: ["dev_user", "alice", "bob"],
-          },
-          {
-            type: "file",
-            name: "AuthService.java",
-            editingBy: null,
-            access: ["dev_user", "alice"],
-          },
-          {
-            type: "file",
-            name: "JwtUtil.java",
-            editingBy: null,
-            access: ["dev_user"],
-          },
+          { type: "file", name: "AuthController.java", editingBy: "alice" },
+          { type: "file", name: "AuthService.java", editingBy: null },
+          { type: "file", name: "JwtUtil.java", editingBy: null },
         ],
       },
       {
@@ -57,45 +33,22 @@ const fileTree = [
         name: "config",
         open: false,
         children: [
-          {
-            type: "file",
-            name: "SecurityConfig.java",
-            editingBy: null,
-            access: ["dev_user"],
-          },
+          { type: "file", name: "SecurityConfig.java", editingBy: null },
         ],
       },
-      {
-        type: "file",
-        name: "Application.java",
-        editingBy: null,
-        access: ["dev_user"],
-      },
+      { type: "file", name: "Application.java", editingBy: null },
     ],
   },
   {
     type: "folder",
     name: "resources",
     open: false,
-    children: [
-      {
-        type: "file",
-        name: "application.yml",
-        editingBy: "bob",
-        access: ["dev_user", "alice", "bob", "charlie"],
-      },
-    ],
+    children: [{ type: "file", name: "application.yml", editingBy: "bob" }],
   },
-  { type: "file", name: "build.gradle", editingBy: null, access: ["dev_user"] },
-  {
-    type: "file",
-    name: "README.md",
-    editingBy: null,
-    access: ["dev_user", "alice", "bob", "charlie", "dana", "evan"],
-  },
+  { type: "file", name: "build.gradle", editingBy: null },
+  { type: "file", name: "README.md", editingBy: null },
 ];
 
-// 파일별 Mock 코드
 const fileCodes = {
   "AuthController.java": `package com.codesync.auth.controller;
 
@@ -172,37 +125,29 @@ MSA 기반 CodeSync 프로젝트의 인증 서비스입니다.
 ## 실행 방법
 \`\`\`bash
 ./gradlew bootRun
-\`\`\`
-
-## API 엔드포인트
-| Method | Path | 설명 |
-|--------|------|------|
-| POST | /api/auth/login | 로그인 |
-| POST | /api/auth/register | 회원가입 |
-| GET  | /api/auth/check-username | 아이디 중복확인 |`,
+\`\`\``,
   "application.yml": `spring:
   datasource:
     url: jdbc:mysql://localhost:3306/codesync
     username: root
     password: \${DB_PASSWORD}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
 
 jwt:
   secret: \${JWT_SECRET}
-  expiration: 86400000  # 24h
+  expiration: 86400000
 
 server:
   port: 8081`,
 };
 
+// ── 수정 로그 저장소 ─────────────────────────────────────────
+// { filename: [ { who, when, diff: [{type, line, content}] }, ... ] }
+const editLogs = {};
+
 // ── 상태 ──────────────────────────────────────────────────────
-let activeFile = null; // 현재 열린 파일 객체
-let isEditingNow = false; // 내가 수정 중인지
+let activeFile = null;
+let isEditingNow = false;
+let codeSnapshot = ""; // 수정 시작 시점의 코드 스냅샷
 
 // ── 초기화 ────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
@@ -210,6 +155,17 @@ document.addEventListener("DOMContentLoaded", () => {
   renderUsers();
   renderFileTree();
   showEmpty();
+
+  // 삭제 확인 인풋 감지
+  const input = document.getElementById("delete-input");
+  if (input) {
+    input.addEventListener("input", () => {
+      const btn = document.getElementById("btn-delete-confirm");
+      input.value === "삭제"
+        ? btn.classList.add("ready")
+        : btn.classList.remove("ready");
+    });
+  }
 });
 
 // ── 네비게이션 ───────────────────────────────────────────────
@@ -217,55 +173,62 @@ function renderNav() {
   document.getElementById("nav-project-name").textContent = projectInfo.name;
 
   const badge = document.getElementById("nav-role-badge");
-  const roleMap = {
-    owner: ["프로젝트장", "owner"],
-    leader: ["팀장", "leader"],
-    member: ["일반", "member"],
-  };
-  const [label, cls] = roleMap[currentUser.role];
-  badge.textContent = label;
-  badge.className = `nav-role-badge ${cls}`;
+  if (currentUser.role === "owner") {
+    badge.textContent = "프로젝트장";
+    badge.className = "nav-role-badge owner";
+  } else {
+    badge.textContent = "";
+    badge.className = "nav-role-badge";
+  }
 }
 
 // ── 사용자 목록 ──────────────────────────────────────────────
 function renderUsers() {
   const list = document.getElementById("user-list");
-
-  const roleOrder = { owner: 0, leader: 1, member: 2 };
-  const sorted = [...members].sort((a, b) => {
-    if (roleOrder[a.role] !== roleOrder[b.role])
-      return roleOrder[a.role] - roleOrder[b.role];
-    return a.nickname.localeCompare(b.nickname, "ko");
-  });
-
-  const groups = { owner: [], leader: [], member: [] };
-  sorted.forEach((m) => groups[m.role].push(m));
-
-  const groupMeta = {
-    owner: { label: "프로젝트장", show: true },
-    leader: { label: "팀장", show: groups.leader.length > 0 },
-    member: { label: "일반", show: groups.member.length > 0 },
-  };
+  const owner = members.find((m) => m.role === "owner");
+  const rest = members
+    .filter((m) => m.role !== "owner")
+    .sort((a, b) => a.nickname.localeCompare(b.nickname, "ko"));
 
   let html = "";
-  for (const role of ["owner", "leader", "member"]) {
-    if (!groupMeta[role].show) continue;
-    html += `<div class="role-group">
-      <div class="role-label">${groupMeta[role].label}</div>`;
-    for (const m of groups[role]) {
-      const initials = getInitials(m.nickname);
-      const canManage =
-        currentUser.role === "owner" ||
-        (currentUser.role === "leader" && role === "member");
+
+  // 프로젝트장
+  if (owner) {
+    const isMe = owner.username === currentUser.username;
+    const initials = getInitials(owner.nickname);
+    html += `
+      <div class="role-group">
+        <div class="role-label">프로젝트장</div>
+        <div class="user-item">
+          <div class="user-avatar owner">${initials}</div>
+          <div class="user-info">
+            <div class="user-name">
+              ${escHtml(owner.nickname)}
+              ${isMe ? '<span style="color:var(--text-dim);font-size:10px"> (나)</span>' : ""}
+              <span class="owner-crown" title="프로젝트장">👑</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // 일반 멤버
+  if (rest.length > 0) {
+    html += `<div class="role-group"><div class="role-label">멤버</div>`;
+    for (const m of rest) {
       const isMe = m.username === currentUser.username;
+      const initials = getInitials(m.nickname);
+      const canKick = currentUser.role === "owner" && !isMe;
       html += `
         <div class="user-item" id="user-${m.username}">
-          <div class="user-avatar ${role}">${initials}</div>
+          <div class="user-avatar member">${initials}</div>
           <div class="user-info">
-            <div class="user-name">${escHtml(m.nickname)}${isMe ? ' <span style="color:var(--text-dim);font-size:10px">(나)</span>' : ""}</div>
-            ${role !== "member" ? `<div class="user-role-tag ${role}">${groupMeta[role].label}</div>` : ""}
+            <div class="user-name">
+              ${escHtml(m.nickname)}
+              ${isMe ? '<span style="color:var(--text-dim);font-size:10px"> (나)</span>' : ""}
+            </div>
           </div>
-          ${canManage && !isMe ? `<button class="user-menu-btn" onclick="openUserMenu(event, '${m.username}', '${role}')">⋯</button>` : ""}
+          ${canKick ? `<button class="user-menu-btn" onclick="openUserMenu(event,'${m.username}')">⋯</button>` : ""}
         </div>`;
     }
     html += "</div>";
@@ -273,15 +236,22 @@ function renderUsers() {
 
   list.innerHTML = html;
 
-  // 장만 프로젝트 삭제 버튼 노출
-  document.getElementById("danger-zone").style.display =
-    currentUser.role === "owner" ? "block" : "none";
+  // 프로젝트장만 하단 버튼 노출
+  const bottom = document.getElementById("panel-bottom");
+  if (currentUser.role === "owner") {
+    bottom.style.display = "flex";
+  } else {
+    bottom.style.display = "none";
+  }
 }
 
 // ── 파일 트리 ────────────────────────────────────────────────
 function renderFileTree() {
-  const tree = document.getElementById("file-tree");
-  tree.innerHTML = buildTreeHTML(fileTree, 0, "");
+  document.getElementById("file-tree").innerHTML = buildTreeHTML(
+    fileTree,
+    0,
+    "",
+  );
 }
 
 function buildTreeHTML(nodes, depth, parentPath) {
@@ -290,25 +260,22 @@ function buildTreeHTML(nodes, depth, parentPath) {
 
   for (const node of nodes) {
     const nodePath = parentPath ? `${parentPath}::${node.name}` : node.name;
-    const safeId = nodePath.replace(/[^a-zA-Z0-9가-힣_\-]/g, "_");
 
     if (node.type === "folder") {
       const arrow = node.open ? "▾" : "▸";
       html += `
-        <div class="tree-item folder ${indent}" id="folder-${safeId}"
-             onclick="toggleFolder('${nodePath}')">
+        <div class="tree-item folder ${indent}" onclick="toggleFolder('${nodePath}')">
           <span class="tree-icon">${arrow}</span>
           <span class="tree-name">${escHtml(node.name)}</span>
           <span class="tree-add-btn"
-                onclick="event.stopPropagation(); openTreeCtx(event, '${nodePath}')"
+                onclick="event.stopPropagation(); openTreeCtx(event,'${nodePath}')"
                 title="이 폴더에 추가">+</span>
         </div>`;
       if (node.open && node.children) {
         html += buildTreeHTML(node.children, depth + 1, nodePath);
       }
     } else {
-      const ext = node.name.split(".").pop();
-      const icon = fileIcon(ext);
+      const icon = fileIcon(node.name.split(".").pop());
       const editTag = node.editingBy
         ? `<span class="editing-tag">@${escHtml(node.editingBy)}</span>`
         : "";
@@ -324,11 +291,10 @@ function buildTreeHTML(nodes, depth, parentPath) {
   return html;
 }
 
-// path = 'src::auth' 같은 :: 구분자 경로로 폴더 노드 탐색
 function findNodeByPath(path) {
   const parts = path.split("::");
-  let nodes = fileTree;
-  let node = null;
+  let nodes = fileTree,
+    node = null;
   for (const part of parts) {
     node = nodes.find((n) => n.name === part);
     if (!node) return null;
@@ -343,52 +309,6 @@ function toggleFolder(path) {
     node.open = !node.open;
     renderFileTree();
   }
-}
-
-// 컨텍스트 메뉴 위치 계산 — 화면 밖으로 나가지 않도록 보정
-function calcMenuPos(e, menuWidth = 170, menuHeight = 80) {
-  const x =
-    e.clientX + menuWidth > window.innerWidth
-      ? e.clientX - menuWidth
-      : e.clientX;
-  const y =
-    e.clientY + menuHeight > window.innerHeight
-      ? e.clientY - menuHeight
-      : e.clientY;
-  return { x, y };
-}
-
-// 폴더의 + 버튼 → 컨텍스트 메뉴
-function openTreeCtx(e, folderPath) {
-  e.stopPropagation();
-  closeCtxMenu();
-
-  const menu = document.createElement("div");
-  menu.className = "ctx-menu";
-  menu.id = "ctx-menu";
-  menu.innerHTML = `
-    <div class="ctx-item" onclick="addFile('${folderPath}'); closeCtxMenu()">📄 파일 추가</div>
-    <div class="ctx-item" onclick="addFolder('${folderPath}'); closeCtxMenu()">📁 폴더 추가</div>
-  `;
-  const { x, y } = calcMenuPos(e, 170, 80);
-  menu.style.top = y + "px";
-  menu.style.left = x + "px";
-  document.body.appendChild(menu);
-  setTimeout(
-    () => document.addEventListener("click", closeCtxMenu, { once: true }),
-    0,
-  );
-}
-
-function findNode(nodes, name, type) {
-  for (const n of nodes) {
-    if (n.name === name && n.type === type) return n;
-    if (n.children) {
-      const found = findNode(n.children, name, type);
-      if (found) return found;
-    }
-  }
-  return null;
 }
 
 function fileIcon(ext) {
@@ -413,14 +333,11 @@ function fileIcon(ext) {
 
 // ── 파일 열기 ────────────────────────────────────────────────
 function openFile(filename) {
-  const node = findNode(fileTree, filename, "file");
+  const node = findNode(fileTree, filename);
   if (!node) return;
 
-  // 이전 수정 상태 해제
-  if (isEditingNow && activeFile) {
-    activeFile.editingBy = null;
-    isEditingNow = false;
-  }
+  // 수정 중이면 완료 처리
+  if (isEditingNow && activeFile) finishEdit(false);
 
   activeFile = node;
   renderFileTree();
@@ -429,26 +346,35 @@ function openFile(filename) {
   renderCode();
 }
 
+function findNode(nodes, filename) {
+  for (const n of nodes) {
+    if (n.type === "file" && n.name === filename) return n;
+    if (n.children) {
+      const found = findNode(n.children, filename);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 function renderTabs() {
   const tabs = document.getElementById("editor-tabs");
   if (!activeFile) {
     tabs.innerHTML = "";
     return;
   }
-
   const ext = activeFile.name.split(".").pop();
-  const color =
-    {
-      java: "#f97316",
-      js: "#facc15",
-      ts: "#3b82f6",
-      html: "#22c55e",
-      css: "#a78bfa",
-      md: "#6b7280",
-      yml: "#6b7280",
-      gradle: "#22c55e",
-    }[ext] || "#6b7280";
-
+  const colorMap = {
+    java: "#f97316",
+    js: "#facc15",
+    ts: "#3b82f6",
+    html: "#22c55e",
+    css: "#a78bfa",
+    md: "#6b7280",
+    yml: "#6b7280",
+    gradle: "#22c55e",
+  };
+  const color = colorMap[ext] || "#6b7280";
   tabs.innerHTML = `
     <div class="editor-tab active">
       <span class="tab-dot" style="background:${color}"></span>
@@ -463,32 +389,16 @@ function renderToolbar() {
     return;
   }
 
-  const canToggleAccess =
-    currentUser.role === "owner" || currentUser.role === "leader";
   const isEditingByOther =
     activeFile.editingBy && activeFile.editingBy !== currentUser.username;
   const isMeEditing = activeFile.editingBy === currentUser.username;
 
-  // 권한 부여 칩 (팀장·장만)
-  let accessChips = "";
-  if (canToggleAccess) {
-    const memberChips = members
-      .filter((m) => m.username !== currentUser.username && m.role === "member")
-      .map((m) => {
-        const granted = activeFile.access.includes(m.username);
-        return `<span class="access-user-chip ${granted ? "granted" : ""}"
-                      onclick="toggleAccess('${m.username}')"
-                      title="${granted ? "권한 제거" : "권한 부여"}">
-                  @${escHtml(m.nickname)}
-                </span>`;
-      })
-      .join("");
-    if (memberChips) {
-      accessChips = `<span class="access-label">접근 권한:</span>${accessChips ? accessChips : memberChips}`;
-    }
-  }
+  const logCount = (editLogs[activeFile.name] || []).length;
+  const logBtn = `
+    <button class="btn-log" onclick="openLogPanel()" title="수정 로그">
+      📋 수정 로그${logCount > 0 ? ` <span class="log-count">${logCount}</span>` : ""}
+    </button>`;
 
-  // 수정 버튼 상태
   let editBtn = "";
   if (isEditingByOther) {
     editBtn = `<button class="btn-edit" disabled style="opacity:.5;cursor:not-allowed;background:var(--orange)">
@@ -502,7 +412,7 @@ function renderToolbar() {
 
   toolbar.innerHTML = `
     <span class="toolbar-path"><span>${escHtml(activeFile.name)}</span></span>
-    <div class="access-toggle">${accessChips}</div>
+    ${logBtn}
     ${editBtn}`;
 }
 
@@ -513,25 +423,20 @@ function renderCode() {
     return;
   }
 
-  const code = fileCodes[activeFile.name] || "// 파일 내용이 없습니다.";
+  const code = fileCodes[activeFile.name] || "";
   const lines = code.split("\n");
   const lineNums = lines.map((_, i) => i + 1).join("\n");
-
-  const isEditingByOther =
-    activeFile.editingBy && activeFile.editingBy !== currentUser.username;
   const isMeEditing = activeFile.editingBy === currentUser.username;
-  const canEdit =
-    isMeEditing && activeFile.access.includes(currentUser.username);
+  const isEditingByOther = activeFile.editingBy && !isMeEditing;
 
   area.innerHTML = `
     <div class="line-numbers" id="line-numbers">${lineNums}</div>
     <textarea class="code-editor" id="code-editor"
-      ${!canEdit ? "disabled" : ""}
+      ${!isMeEditing || isEditingByOther ? "disabled" : ""}
       spellcheck="false"
       oninput="syncLineNumbers()"
     >${escHtml(code)}</textarea>`;
 
-  // 줄번호 동기화 스크롤
   const editor = document.getElementById("code-editor");
   const nums = document.getElementById("line-numbers");
   editor.addEventListener("scroll", () => {
@@ -554,64 +459,228 @@ function showEmpty() {
 
 function syncLineNumbers() {
   const editor = document.getElementById("code-editor");
-  if (!editor) return;
-  const lines = editor.value.split("\n");
+  if (!editor || !activeFile) return;
   const nums = document.getElementById("line-numbers");
-  if (nums) nums.textContent = lines.map((_, i) => i + 1).join("\n");
-
-  // Mock 저장 (실제 API 연결 시 교체)
-  if (activeFile) fileCodes[activeFile.name] = editor.value;
+  if (nums)
+    nums.textContent = editor.value
+      .split("\n")
+      .map((_, i) => i + 1)
+      .join("\n");
+  fileCodes[activeFile.name] = editor.value;
 }
 
 // ── 수정 토글 ────────────────────────────────────────────────
 function toggleEdit() {
   if (!activeFile) return;
-
   if (isEditingNow) {
-    // 수정 완료
-    activeFile.editingBy = null;
-    isEditingNow = false;
+    finishEdit(true);
   } else {
-    // 수정 시작
+    // 수정 시작 — 스냅샷 저장
+    codeSnapshot = fileCodes[activeFile.name] || "";
     activeFile.editingBy = currentUser.username;
     isEditingNow = true;
+    renderFileTree();
+    renderToolbar();
+    renderCode();
+    document.getElementById("code-editor")?.focus();
+  }
+}
+
+function finishEdit(saveLog) {
+  if (!activeFile) return;
+  const newCode = fileCodes[activeFile.name] || "";
+
+  if (saveLog) {
+    const diff = computeDiff(codeSnapshot, newCode);
+    if (diff.length > 0) {
+      if (!editLogs[activeFile.name]) editLogs[activeFile.name] = [];
+      editLogs[activeFile.name].push({
+        who: currentUser.nickname,
+        when: new Date(),
+        diff,
+      });
+    }
   }
 
+  activeFile.editingBy = null;
+  isEditingNow = false;
+  codeSnapshot = "";
   renderFileTree();
   renderToolbar();
   renderCode();
 }
 
-// ── 접근 권한 토글 ───────────────────────────────────────────
-function toggleAccess(username) {
-  if (!activeFile) return;
-  const idx = activeFile.access.indexOf(username);
-  if (idx === -1) {
-    activeFile.access.push(username);
-  } else {
-    activeFile.access.splice(idx, 1);
+// ── Diff 계산 ─────────────────────────────────────────────────
+// 줄 단위 Myers diff (간소화 버전)
+// 반환: [{ type: 'add'|'del'|'mod', line: number, content: string }, ...]
+function computeDiff(oldCode, newCode) {
+  const oldLines = oldCode.split("\n");
+  const newLines = newCode.split("\n");
+  const result = [];
+
+  const lcs = buildLCS(oldLines, newLines);
+  let oi = 0,
+    ni = 0,
+    li = 0;
+
+  while (oi < oldLines.length || ni < newLines.length) {
+    if (
+      oi < oldLines.length &&
+      ni < newLines.length &&
+      li < lcs.length &&
+      oldLines[oi] === lcs[li] &&
+      newLines[ni] === lcs[li]
+    ) {
+      // 공통 줄 — 변화 없음
+      oi++;
+      ni++;
+      li++;
+    } else if (
+      ni < newLines.length &&
+      (li >= lcs.length || newLines[ni] !== lcs[li])
+    ) {
+      // 추가된 줄
+      result.push({ type: "add", line: ni + 1, content: newLines[ni] });
+      ni++;
+    } else if (
+      oi < oldLines.length &&
+      (li >= lcs.length || oldLines[oi] !== lcs[li])
+    ) {
+      // 삭제된 줄
+      result.push({ type: "del", line: oi + 1, content: oldLines[oi] });
+      oi++;
+    } else {
+      oi++;
+      ni++;
+    }
   }
-  renderToolbar();
+
+  return result;
+}
+
+function buildLCS(a, b) {
+  const m = a.length,
+    n = b.length;
+  // 메모리 절약을 위해 500줄 이상이면 간소화
+  if (m > 500 || n > 500) return [];
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1] + 1
+          : Math.max(dp[i - 1][j], dp[i][j - 1]);
+
+  const lcs = [];
+  let i = m,
+    j = n;
+  while (i > 0 && j > 0) {
+    if (a[i - 1] === b[j - 1]) {
+      lcs.unshift(a[i - 1]);
+      i--;
+      j--;
+    } else if (dp[i - 1][j] > dp[i][j - 1]) i--;
+    else j--;
+  }
+  return lcs;
+}
+
+// ── 수정 로그 패널 ────────────────────────────────────────────
+function openLogPanel() {
+  if (!activeFile) return;
+  const logs = editLogs[activeFile.name] || [];
+  const overlay = document.getElementById("log-overlay");
+  const content = document.getElementById("log-content");
+  const title = document.getElementById("log-title");
+
+  title.textContent = `수정 로그 — ${activeFile.name}`;
+
+  if (logs.length === 0) {
+    content.innerHTML = `<div class="log-empty">아직 수정 기록이 없습니다.</div>`;
+  } else {
+    content.innerHTML = [...logs]
+      .reverse()
+      .map((log, i) => {
+        const timeStr = formatTime(log.when);
+        const adds = log.diff.filter((d) => d.type === "add").length;
+        const dels = log.diff.filter((d) => d.type === "del").length;
+        const diffHTML = log.diff
+          .map(
+            (d) => `
+        <div class="diff-line ${d.type}">
+          <span class="diff-lnum">${d.line}</span>
+          <span class="diff-prefix">${d.type === "add" ? "+" : "-"}</span>
+          <span class="diff-content">${escHtml(d.content)}</span>
+        </div>`,
+          )
+          .join("");
+
+        return `
+        <div class="log-entry" id="log-entry-${i}">
+          <div class="log-entry-header" onclick="toggleLogEntry(${i})">
+            <div class="log-entry-who">
+              <span class="log-avatar">${getInitials(log.who)}</span>
+              <span class="log-nickname">${escHtml(log.who)}</span>
+            </div>
+            <div class="log-entry-meta">
+              <span class="log-stat add">+${adds}</span>
+              <span class="log-stat del">-${dels}</span>
+              <span class="log-time">${timeStr}</span>
+              <span class="log-arrow" id="log-arrow-${i}">▾</span>
+            </div>
+          </div>
+          <div class="log-diff" id="log-diff-${i}">
+            <div class="diff-block">${diffHTML}</div>
+          </div>
+        </div>`;
+      })
+      .join("");
+  }
+
+  overlay.classList.add("open");
+}
+
+function toggleLogEntry(i) {
+  const diff = document.getElementById(`log-diff-${i}`);
+  const arrow = document.getElementById(`log-arrow-${i}`);
+  const open = diff.style.display !== "none" && diff.style.display !== "";
+  if (open || diff.style.display === "") {
+    diff.style.display = "none";
+    arrow.textContent = "▸";
+  } else {
+    diff.style.display = "block";
+    arrow.textContent = "▾";
+  }
+}
+
+function closeLogPanel() {
+  document.getElementById("log-overlay").classList.remove("open");
+}
+
+function handleLogOverlay(e) {
+  if (e.target === document.getElementById("log-overlay")) closeLogPanel();
+}
+
+function formatTime(date) {
+  const d = new Date(date);
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
 }
 
 // ── 파일/폴더 추가 ───────────────────────────────────────────
-// folderPath: null → 루트에 추가 / 'src::auth' → 해당 폴더 하위에 추가
 function addFile(folderPath) {
   const name = prompt("파일 이름을 입력하세요 (예: MyClass.java)");
-  if (!name || !name.trim()) return;
-  const newNode = {
-    type: "file",
-    name: name.trim(),
-    editingBy: null,
-    access: [currentUser.username],
-  };
-
+  if (!name?.trim()) return;
+  const node = { type: "file", name: name.trim(), editingBy: null };
   if (!folderPath) {
-    fileTree.push(newNode);
+    fileTree.push(node);
   } else {
     const folder = findNodeByPath(folderPath);
-    if (folder && folder.type === "folder") {
-      folder.children.push(newNode);
+    if (folder?.type === "folder") {
+      folder.children.push(node);
       folder.open = true;
     }
   }
@@ -620,61 +689,55 @@ function addFile(folderPath) {
 
 function addFolder(folderPath) {
   const name = prompt("폴더 이름을 입력하세요");
-  if (!name || !name.trim()) return;
-  const newNode = {
-    type: "folder",
-    name: name.trim(),
-    open: true,
-    children: [],
-  };
-
+  if (!name?.trim()) return;
+  const node = { type: "folder", name: name.trim(), open: true, children: [] };
   if (!folderPath) {
-    fileTree.push(newNode);
+    fileTree.push(node);
   } else {
     const folder = findNodeByPath(folderPath);
-    if (folder && folder.type === "folder") {
-      folder.children.push(newNode);
+    if (folder?.type === "folder") {
+      folder.children.push(node);
       folder.open = true;
     }
   }
   renderFileTree();
 }
 
-// ── 사용자 컨텍스트 메뉴 ─────────────────────────────────────
-function openUserMenu(e, username, role) {
+// ── 컨텍스트 메뉴 ────────────────────────────────────────────
+function openTreeCtx(e, folderPath) {
   e.stopPropagation();
   closeCtxMenu();
-
-  const member = members.find((m) => m.username === username);
-  if (!member) return;
-
-  let items = "";
-  if (currentUser.role === "owner") {
-    if (role === "member") {
-      items += ctxItem("팀장으로 승급", () => promoteMember(username));
-    }
-    if (role === "leader") {
-      items += ctxItem("일반으로 강등", () => demoteMember(username));
-    }
-    items += ctxSep();
-    items += ctxItem("프로젝트에서 추방", () => kickMember(username), true);
-  } else if (currentUser.role === "leader" && role === "member") {
-    items += ctxItem("팀장 권한 부여", () => promoteMember(username));
-    items += ctxSep();
-    items += ctxItem("프로젝트에서 추방", () => kickMember(username), true);
-  }
-
-  if (!items) return;
-
   const menu = document.createElement("div");
   menu.className = "ctx-menu";
   menu.id = "ctx-menu";
-  menu.innerHTML = items;
-  const { x, y } = calcMenuPos(e, 170, 120);
+  menu.innerHTML = `
+    <div class="ctx-item" onclick="addFile('${folderPath}'); closeCtxMenu()">📄 파일 추가</div>
+    <div class="ctx-item" onclick="addFolder('${folderPath}'); closeCtxMenu()">📁 폴더 추가</div>`;
+  const { x, y } = calcMenuPos(e, 170, 80);
   menu.style.top = y + "px";
   menu.style.left = x + "px";
   document.body.appendChild(menu);
+  setTimeout(
+    () => document.addEventListener("click", closeCtxMenu, { once: true }),
+    0,
+  );
+}
 
+function openUserMenu(e, username) {
+  e.stopPropagation();
+  closeCtxMenu();
+  const menu = document.createElement("div");
+  menu.className = "ctx-menu";
+  menu.id = "ctx-menu";
+  menu.innerHTML = ctxItem(
+    "프로젝트에서 추방",
+    () => kickMember(username),
+    true,
+  );
+  const { x, y } = calcMenuPos(e, 170, 60);
+  menu.style.top = y + "px";
+  menu.style.left = x + "px";
+  document.body.appendChild(menu);
   setTimeout(
     () => document.addEventListener("click", closeCtxMenu, { once: true }),
     0,
@@ -700,20 +763,18 @@ function closeCtxMenu() {
   document.getElementById("ctx-menu")?.remove();
 }
 
-function promoteMember(username) {
-  const m = members.find((m) => m.username === username);
-  if (m) {
-    m.role = "leader";
-    renderUsers();
-  }
+function calcMenuPos(e, menuWidth = 170, menuHeight = 80) {
+  const x =
+    e.clientX + menuWidth > window.innerWidth
+      ? e.clientX - menuWidth
+      : e.clientX;
+  const y =
+    e.clientY + menuHeight > window.innerHeight
+      ? e.clientY - menuHeight
+      : e.clientY;
+  return { x, y };
 }
-function demoteMember(username) {
-  const m = members.find((m) => m.username === username);
-  if (m) {
-    m.role = "member";
-    renderUsers();
-  }
-}
+
 function kickMember(username) {
   const idx = members.findIndex((m) => m.username === username);
   if (idx !== -1) {
@@ -734,27 +795,15 @@ function closeDeleteModal() {
   document.getElementById("delete-overlay").classList.remove("open");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const input = document.getElementById("delete-input");
-  if (input) {
-    input.addEventListener("input", () => {
-      const btn = document.getElementById("btn-delete-confirm");
-      if (input.value === "삭제") {
-        btn.classList.add("ready");
-      } else {
-        btn.classList.remove("ready");
-      }
-    });
-  }
-});
+function handleDeleteOverlay(e) {
+  if (e.target === document.getElementById("delete-overlay"))
+    closeDeleteModal();
+}
 
 function confirmDelete() {
-  const input = document.getElementById("delete-input");
-  if (input.value !== "삭제") return;
-
+  if (document.getElementById("delete-input").value !== "삭제") return;
   // TODO: API 연결
-  // await fetch(`http://YOUR_API_URL/api/projects/${projectInfo.id}`, { method: 'DELETE' });
-  alert("[DEV] 프로젝트가 삭제되었습니다. (Mock)");
+  alert("[DEV] 프로젝트가 삭제되었습니다.");
   window.location.href = "project.html";
 }
 
@@ -770,24 +819,89 @@ function escHtml(str) {
   );
 }
 
-// 한글 포함 여부에 따라 1글자, 영문이면 2글자 이니셜
 function getInitials(nickname) {
   if (!nickname) return "?";
-  const hasKorean = /[가-힣]/.test(nickname);
-  return nickname.slice(0, hasKorean ? 1 : 2).toUpperCase();
+  return nickname.slice(0, /[가-힣]/.test(nickname) ? 1 : 2).toUpperCase();
 }
 
-function handleDeleteOverlay(e) {
-  if (e.target === document.getElementById("delete-overlay"))
-    closeDeleteModal();
-}
-
-// ── 프로젝트 진입 ─────────────────────────────────────────────
-function openProject(id) {
-  window.location.href = `editor.html?id=${id}`;
-}
-
-// ESC 키로 모달 닫기
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeDeleteModal();
+  if (e.key === "Escape") {
+    closeDeleteModal();
+    closeLogPanel();
+  }
 });
+
+// ── 사용자 초대 모달 ─────────────────────────────────────────
+function openInviteModal() {
+  document.getElementById("invite-overlay").classList.add("open");
+  document.getElementById("invite-nickname-input").value = "";
+  const hint = document.getElementById("invite-hint");
+  hint.textContent = "";
+  hint.className = "invite-hint info";
+  document.getElementById("btn-invite-send").disabled = true;
+  document.getElementById("invite-nickname-input").focus();
+}
+
+function closeInviteModal() {
+  document.getElementById("invite-overlay").classList.remove("open");
+}
+
+function handleInviteOverlay(e) {
+  if (e.target === document.getElementById("invite-overlay"))
+    closeInviteModal();
+}
+
+// 닉네임 입력할 때마다 실시간 확인
+function validateInviteNickname() {
+  const value = document.getElementById("invite-nickname-input").value.trim();
+  const hint = document.getElementById("invite-hint");
+  const btn = document.getElementById("btn-invite-send");
+
+  if (!value) {
+    hint.textContent = "";
+    hint.className = "invite-hint info";
+    btn.disabled = true;
+    return;
+  }
+
+  // 이미 참가 중인 멤버인지 확인
+  const already = members.find((m) => m.nickname === value);
+  if (already) {
+    hint.textContent = "이미 프로젝트에 참가 중인 멤버입니다.";
+    hint.className = "invite-hint fail";
+    btn.disabled = true;
+    return;
+  }
+
+  // 자기 자신인지 확인
+  if (value === currentUser.nickname) {
+    hint.textContent = "자기 자신은 초대할 수 없습니다.";
+    hint.className = "invite-hint fail";
+    btn.disabled = true;
+    return;
+  }
+
+  hint.textContent = `"${value}" 에게 초대를 보냅니다.`;
+  hint.className = "invite-hint ok";
+  btn.disabled = false;
+}
+
+function sendInvite() {
+  const nickname = document
+    .getElementById("invite-nickname-input")
+    .value.trim();
+  const hint = document.getElementById("invite-hint");
+
+  if (!nickname) return;
+
+  // TODO: API 연결
+  // await request_invite(token, projectId, nickname);
+
+  // [DEV] Mock — 실제로는 상대방 초대목록에 들어가는 것이라 내 화면엔 변화 없음
+  hint.textContent = `✓ "${nickname}" 에게 초대를 보냈습니다!`;
+  hint.className = "invite-hint ok";
+  document.getElementById("btn-invite-send").disabled = true;
+  document.getElementById("invite-nickname-input").value = "";
+
+  setTimeout(closeInviteModal, 1200);
+}

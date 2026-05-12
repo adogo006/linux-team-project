@@ -61,7 +61,12 @@
           <span class="online-dot"></span>
         </div>
         <div class="user-list" id="user-list"></div>
-        <div class="danger-zone" id="danger-zone">
+
+        <!-- 프로젝트장 전용 하단 버튼 -->
+        <div class="panel-bottom" id="panel-bottom">
+          <button class="btn-invite" onclick="openInviteModal()">
+            + 사용자 초대
+          </button>
           <button class="btn-danger" onclick="openDeleteModal()">
             ⚠ 프로젝트 삭제
           </button>
@@ -69,7 +74,57 @@
       </aside>
     </div>
 
-    <!-- 프로젝트 삭제 모달 (장 전용) -->
+    <!-- 수정 로그 패널 -->
+    <div class="log-overlay" id="log-overlay" onclick="handleLogOverlay(event)">
+      <div class="log-backdrop"></div>
+      <div class="log-panel">
+        <div class="log-panel-header">
+          <div class="log-panel-title" id="log-title">수정 로그</div>
+          <button class="log-close" onclick="closeLogPanel()">✕</button>
+        </div>
+        <div class="log-content" id="log-content"></div>
+      </div>
+    </div>
+
+    <!-- 사용자 초대 모달 -->
+    <div
+      class="invite-modal-overlay"
+      id="invite-overlay"
+      onclick="handleInviteOverlay(event)"
+    >
+      <div class="invite-modal">
+        <div class="invite-modal-corner"></div>
+        <div class="invite-modal-title">사용자 초대<span>_</span></div>
+        <div class="invite-modal-sub">// 닉네임으로 초대를 보냅니다</div>
+
+        <label class="invite-input-label">닉네임</label>
+        <input
+          class="invite-input"
+          id="invite-nickname-input"
+          type="text"
+          placeholder="초대할 사용자의 닉네임"
+          oninput="validateInviteNickname()"
+          autocomplete="off"
+        />
+        <div class="invite-hint info" id="invite-hint"></div>
+
+        <div class="invite-modal-actions">
+          <button class="btn-cancel-modal" onclick="closeInviteModal()">
+            취소
+          </button>
+          <button
+            class="btn-invite-send"
+            id="btn-invite-send"
+            onclick="sendInvite()"
+            disabled
+          >
+            초대 보내기
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 프로젝트 삭제 모달 -->
     <div
       class="modal-overlay"
       id="delete-overlay"
