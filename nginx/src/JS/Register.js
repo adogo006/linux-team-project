@@ -1,6 +1,6 @@
 // ── register.js ──
 
-const API_BASE = "http://YOUR_API_URL"; // TODO: API URL 확정되면 교체
+const API_BASE = "http://YOUR_API_URL";
 
 // ── 상태 ─────────────────────────────────────────────────────
 const checked = { nickname: false, username: false };
@@ -10,35 +10,39 @@ const pwState = { valid: false, match: false };
 
 // 닉네임 중복 확인
 async function request_register_nickname(nickname) {
-  const res = await fetch(`${API_BASE}/api/auth/check-nickname`, {
+  const res = await fetch(`${API_BASE}/api:8000/request_nickname_check`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nickname }),
   });
   const data = await res.json();
-  return data; // true: 사용 가능, false: 중복
+  return data.available; // { available: true/false }
 }
 
 // 아이디 중복 확인
 async function request_register_id(username) {
-  const res = await fetch(`${API_BASE}/api/auth/check-id`, {
+  const res = await fetch(`${API_BASE}/api:8000/request_id_check`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ user_id: username }), // 백엔드 필드명: user_id
   });
   const data = await res.json();
-  return data; // true: 사용 가능, false: 중복
+  return data.available; // { available: true/false }
 }
 
 // 회원가입
 async function request_register(nickname, username, password) {
-  const res = await fetch(`${API_BASE}/api/auth/register`, {
+  const res = await fetch(`${API_BASE}/api:8000/request_register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nickname, username, password }),
+    body: JSON.stringify({
+      nick_name: nickname, // 백엔드 필드명: nick_name
+      id: username, // 백엔드 필드명: id
+      password,
+    }),
   });
-  if (!res.ok) {
-    const data = await res.json();
+  const data = await res.json();
+  if (!res.ok || !data.success) {
     throw new Error(data.message || "REGISTER_FAILED");
   }
 }
@@ -57,14 +61,13 @@ const rules = {
   },
 };
 
-// ── 실시간 유효성 확인 (타이핑마다 호출) ─────────────────────
+// ── 실시간 유효성 확인 ────────────────────────────────────────
 function validateField(field) {
   const input = document.getElementById(field);
   const hint = document.getElementById(field + "-hint");
   const btn = document.getElementById(field + "-btn");
   const value = input.value.trim();
 
-  // 이전 중복확인 결과 초기화
   checked[field] = false;
   updateSubmitBtn();
 
@@ -82,7 +85,7 @@ function validateField(field) {
     input.classList.remove("invalid");
     hint.textContent = "✓ 형식이 올바릅니다. 중복 확인을 해주세요.";
     hint.className = "hint ok";
-    btn.disabled = false; // 중복 확인 버튼 활성화
+    btn.disabled = false;
     btn.className = "btn-check active";
   } else {
     input.classList.add("invalid");
@@ -94,7 +97,7 @@ function validateField(field) {
   }
 }
 
-// ── 중복 확인 버튼 ────────────────────────────────────────────
+// ── 중복 확인 ─────────────────────────────────────────────────
 async function checkDuplicate(field) {
   const input = document.getElementById(field);
   const hint = document.getElementById(field + "-hint");
@@ -117,7 +120,6 @@ async function checkDuplicate(field) {
       input.classList.add("valid");
       input.classList.remove("invalid");
       checked[field] = true;
-      // 버튼 → 파란색 체크 스타일
       btn.textContent = "✓ 확인됨";
       btn.className = "btn-check confirmed";
       btn.disabled = true;
@@ -140,7 +142,7 @@ async function checkDuplicate(field) {
   updateSubmitBtn();
 }
 
-// ── 비밀번호 실시간 확인 ──────────────────────────────────────
+// ── 비밀번호 확인 ─────────────────────────────────────────────
 const PW_REGEX =
   /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]).{8,}$/;
 
@@ -168,7 +170,6 @@ function checkPassword() {
     pwState.valid = false;
   }
 
-  // 비밀번호 바뀌면 재입력도 다시 확인
   checkConfirm();
 }
 
@@ -211,7 +212,7 @@ function checkConfirm() {
   updateSubmitBtn();
 }
 
-// ── 가입 버튼 활성화 조건 ─────────────────────────────────────
+// ── 가입 버튼 활성화 ──────────────────────────────────────────
 function updateSubmitBtn() {
   const ready =
     checked.nickname && checked.username && pwState.valid && pwState.match;
@@ -239,7 +240,7 @@ async function handleRegister() {
     status.textContent =
       e.message === "REGISTER_FAILED"
         ? "회원가입에 실패했습니다. 다시 시도해주세요."
-        : "서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.";
+        : e.message || "서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.";
     status.className = "status error";
   }
 }
