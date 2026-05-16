@@ -66,10 +66,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const token = sessionStorage.getItem("access_token");
 
   // 토큰 없으면 로그인 페이지로
-  if (!token) {
+  /*if (!token) {
     window.location.href = "Login.html";
     return;
-  }
+  }*/
 
   // JWT payload 디코딩해서 닉네임 표시
   // TODO: API 팀원과 payload 필드명 확인 (nickname or username)
