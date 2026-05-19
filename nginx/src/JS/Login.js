@@ -8,7 +8,7 @@ async function request_login(id, password) {
   });
   const data = await res.json();
 
-  if (!res.ok || !data.success) {
+  if (!res.ok) {
     throw new Error(data.message || "INVALID_CREDENTIALS");
   }
 
@@ -33,7 +33,7 @@ async function handleLogin() {
   try {
     const data = await request_login(id, pw);
 
-    if (data && data.success === true) {
+    if (data && data.success) {
       sessionStorage.setItem("access_token", data.access_token);
       sessionStorage.setItem("nickname", data.nickname); // 파싱 없이 바로 사용
       sessionStorage.setItem("token_type", data.token_type);

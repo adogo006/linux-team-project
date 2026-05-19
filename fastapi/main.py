@@ -108,6 +108,24 @@ def request_register(payload: schemas.RequestRegister):
     db = SessionLocal()
 
     try:
+        existing_nickname = crud.get_user_by_nickname(db, payload.nickname)
+        if existing_nickname:
+            return {"success": False,
+                    "message": "이미 사용 중인 닉네임입니다.",
+                    "user": {
+                    "user_id": new_user.id,
+                    "nickname": new_user.nickname,
+            },}
+
+        existing_user = crud.get_user_by_user_id(db, payload.id)
+        if existing_user:
+            return {"success": False,
+                    "message": "이미 사용 중인 아이디입니다.",
+                    "user": {
+                    "user_id": new_user.id,
+                    "nickname": new_user.nickname,
+            },}
+        
         new_user = crud.create_user(
             db=db,
             user_id=payload.id,

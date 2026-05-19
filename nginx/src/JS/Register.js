@@ -1,7 +1,4 @@
 // ── register.js ──
-
-const API_BASE = "http://YOUR_API_URL";
-
 // ── 상태 ─────────────────────────────────────────────────────
 const checked = { nickname: false, username: false };
 const pwState = { valid: false, match: false };
@@ -10,7 +7,7 @@ const pwState = { valid: false, match: false };
 
 // 닉네임 중복 확인
 async function request_register_nickname(nickname) {
-  const res = await fetch(`${API_BASE}/api:8000/request_nickname_check`, {
+  const res = await fetch(`/api/request_nickname_check`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nickname }),
@@ -21,7 +18,7 @@ async function request_register_nickname(nickname) {
 
 // 아이디 중복 확인
 async function request_register_id(username) {
-  const res = await fetch(`${API_BASE}/api:8000/request_id_check`, {
+  const res = await fetch(`/api/request_id_check`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id: username }), // 백엔드 필드명: user_id
@@ -32,7 +29,7 @@ async function request_register_id(username) {
 
 // 회원가입
 async function request_register(nickname, username, password) {
-  const res = await fetch(`${API_BASE}/api:8000/request_register`, {
+  const res = await fetch(`/api/request_register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
