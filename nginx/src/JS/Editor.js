@@ -1,160 +1,50 @@
 // ── editor.js ──
 
-// ── Mock 데이터 ───────────────────────────────────────────────
-const currentUser = { username: "dev_user", nickname: "개발자", role: "owner" };
-const projectInfo = { id: 1, name: "Auth Service" };
-
-const members = [
-  { username: "dev_user", nickname: "개발자", role: "owner" },
-  { username: "alice", nickname: "Alice", role: "member" },
-  { username: "bob", nickname: "Bob", role: "member" },
-  { username: "charlie", nickname: "Charlie", role: "member" },
-  { username: "dana", nickname: "Dana", role: "member" },
-];
-
-const fileTree = [
-  {
-    type: "folder",
-    name: "src",
-    open: true,
-    children: [
-      {
-        type: "folder",
-        name: "auth",
-        open: true,
-        children: [
-          { type: "file", name: "AuthController.java", editingBy: "alice" },
-          { type: "file", name: "AuthService.java", editingBy: null },
-          { type: "file", name: "JwtUtil.java", editingBy: null },
-        ],
-      },
-      {
-        type: "folder",
-        name: "config",
-        open: false,
-        children: [
-          { type: "file", name: "SecurityConfig.java", editingBy: null },
-        ],
-      },
-      { type: "file", name: "Application.java", editingBy: null },
-    ],
-  },
-  {
-    type: "folder",
-    name: "resources",
-    open: false,
-    children: [{ type: "file", name: "application.yml", editingBy: "bob" }],
-  },
-  { type: "file", name: "build.gradle", editingBy: null },
-  { type: "file", name: "README.md", editingBy: null },
-];
-
-const fileCodes = {
-  "AuthController.java": `package com.codesync.auth.controller;
-
-import com.codesync.auth.service.AuthService;
-import com.codesync.auth.dto.LoginRequest;
-import com.codesync.auth.dto.LoginResponse;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-@RestController
-@RequestMapping("/api/auth")
-@RequiredArgsConstructor
-public class AuthController {
-
-    private final AuthService authService;
-
-    @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(
-            @RequestBody LoginRequest request) {
-        LoginResponse response = authService.login(request);
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/register")
-    public ResponseEntity<Void> register(
-            @RequestBody RegisterRequest request) {
-        authService.register(request);
-        return ResponseEntity.ok().build();
-    }
-}`,
-  "JwtUtil.java": `package com.codesync.auth.util;
-
-import io.jsonwebtoken.*;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-import java.util.Date;
-
-@Component
-public class JwtUtil {
-
-    @Value("\${jwt.secret}")
-    private String secret;
-
-    @Value("\${jwt.expiration}")
-    private long expiration;
-
-    public String generateToken(String username) {
-        return Jwts.builder()
-                .setSubject(username)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(SignatureAlgorithm.HS256, secret)
-                .compact();
-    }
-
-    public String extractUsername(String token) {
-        return Jwts.parser()
-                .setSigningKey(secret)
-                .parseClaimsJws(token)
-                .getBody()
-                .getSubject();
-    }
-}`,
-  "README.md": `# Auth Service
-
-MSA 기반 CodeSync 프로젝트의 인증 서비스입니다.
-
-## 기술 스택
-- Spring Boot 3.x
-- Spring Security + JWT
-- MySQL / Redis
-
-## 실행 방법
-\`\`\`bash
-./gradlew bootRun
-\`\`\``,
-  "application.yml": `spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/codesync
-    username: root
-    password: \${DB_PASSWORD}
-
-jwt:
-  secret: \${JWT_SECRET}
-  expiration: 86400000
-
-server:
-  port: 8081`,
-};
-
-// ── 수정 로그 저장소 ─────────────────────────────────────────
-// { filename: [ { who, when, diff: [{type, line, content}] }, ... ] }
-const editLogs = {};
+const API_BASE = "http://YOUR_API_URL";
 
 // ── 상태 ──────────────────────────────────────────────────────
-let activeFile = null;
+let currentUser = { nickname: "", role: "member" };
+let projectInfo = { id: "", name: "" };
+let members = [];
+let fileTree = [];
+let fileCodes = {}; // { file_id: "코드 내용" }
+let fileNodeMap = {}; // { file_id: node 객체 }
+let editLogs = []; // 서버에서 받아온 프로젝트 로그
+let activeFile = null; // 현재 열린 파일 노드
 let isEditingNow = false;
-let codeSnapshot = ""; // 수정 시작 시점의 코드 스냅샷
+let codeSnapshot = "";
+
+let heartbeatTimer = null; // 파일 편집 하트비트 인터벌
+let pollTimer = null; // 멤버 폴링 인터벌
 
 // ── 초기화 ────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
-  renderNav();
-  renderUsers();
-  renderFileTree();
-  showEmpty();
+document.addEventListener("DOMContentLoaded", async () => {
+  const token = sessionStorage.getItem("access_token");
+  if (!token) {
+    window.location.href = "Login.html";
+    return;
+  }
+
+  // URL에서 project_id 추출
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get("id");
+  if (!projectId) {
+    window.location.href = "project.html";
+    return;
+  }
+
+  projectInfo.id = projectId;
+
+  const nickname = sessionStorage.getItem("nickname") || "";
+  currentUser.nickname = nickname;
+
+  try {
+    await loadProject(token, projectId);
+  } catch (e) {
+    console.error("프로젝트 로드 실패:", e);
+    window.location.href = "project.html";
+    return;
+  }
 
   // 삭제 확인 인풋 감지
   const input = document.getElementById("delete-input");
@@ -166,7 +56,100 @@ document.addEventListener("DOMContentLoaded", () => {
         : btn.classList.remove("ready");
     });
   }
+
+  // 멤버 목록 5초 폴링 시작
+  pollTimer = setInterval(() => pollMembers(token, projectId), 5000);
+
+  // 페이지 떠날 때 편집 상태 해제
+  window.addEventListener("beforeunload", () => {
+    if (isEditingNow && activeFile) {
+      releaseFile(token, projectId, activeFile.file_id);
+    }
+  });
 });
+
+// ── 프로젝트 열기 ─────────────────────────────────────────────
+async function loadProject(token, projectId) {
+  const res = await fetch(`${API_BASE}/api:8000/request_project_open`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ project_id: projectId }),
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error("OPEN_FAILED");
+
+  projectInfo.name = data.project.project_name;
+  editLogs = data.logs || [];
+
+  // 파일 트리 변환 및 nodeMap 구성
+  fileTree = buildTreeFromServer(data.file_tree);
+
+  // 멤버 목록 로드
+  await loadMembers(token, projectId);
+
+  renderNav();
+  renderUsers();
+  renderFileTree();
+  showEmpty();
+}
+
+// ── 서버 파일트리 → 내부 트리 구조 변환 ──────────────────────
+// 서버: [{ uid, display_name, node_type, parent_uid, children }, ...]
+function buildTreeFromServer(nodes) {
+  if (!nodes || !Array.isArray(nodes)) return [];
+  return nodes.map((n) => {
+    const node = {
+      file_id: n.uid,
+      name: n.display_name,
+      type: n.node_type === "DIRECTORY" ? "folder" : "file",
+      editingBy: null,
+      open: true,
+    };
+    if (node.type === "folder") {
+      node.children = buildTreeFromServer(n.children || []);
+    }
+    fileNodeMap[n.uid] = node;
+    return node;
+  });
+}
+
+// ── 멤버 목록 로드 ────────────────────────────────────────────
+async function loadMembers(token, projectId) {
+  const res = await fetch(`${API_BASE}/api:8000/request_project_members`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ project_id: projectId }),
+  });
+  const data = await res.json();
+  if (!data.success) return;
+
+  members = data.members.map((m) => ({
+    nickname: m.nickname,
+    role: m.is_creator ? "owner" : "member",
+    isEditing: m.is_editing,
+  }));
+
+  // 내 role 업데이트
+  const me = members.find((m) => m.nickname === currentUser.nickname);
+  if (me) currentUser.role = me.role;
+
+  renderUsers();
+}
+
+// ── 멤버 폴링 ─────────────────────────────────────────────────
+async function pollMembers(token, projectId) {
+  try {
+    await loadMembers(token, projectId);
+  } catch (e) {
+    console.error("멤버 폴링 실패:", e);
+  }
+}
 
 // ── 네비게이션 ───────────────────────────────────────────────
 function renderNav() {
@@ -192,43 +175,41 @@ function renderUsers() {
 
   let html = "";
 
-  // 프로젝트장
   if (owner) {
-    const isMe = owner.username === currentUser.username;
-    const initials = getInitials(owner.nickname);
+    const isMe = owner.nickname === currentUser.nickname;
     html += `
       <div class="role-group">
         <div class="role-label">프로젝트장</div>
         <div class="user-item">
-          <div class="user-avatar owner">${initials}</div>
+          <div class="user-avatar owner">${getInitials(owner.nickname)}</div>
           <div class="user-info">
             <div class="user-name">
               ${escHtml(owner.nickname)}
               ${isMe ? '<span style="color:var(--text-dim);font-size:10px"> (나)</span>' : ""}
               <span class="owner-crown" title="프로젝트장">👑</span>
             </div>
+            ${owner.isEditing ? '<div class="user-status editing">수정 중</div>' : ""}
           </div>
         </div>
       </div>`;
   }
 
-  // 일반 멤버
   if (rest.length > 0) {
     html += `<div class="role-group"><div class="role-label">멤버</div>`;
     for (const m of rest) {
-      const isMe = m.username === currentUser.username;
-      const initials = getInitials(m.nickname);
+      const isMe = m.nickname === currentUser.nickname;
       const canKick = currentUser.role === "owner" && !isMe;
       html += `
-        <div class="user-item" id="user-${m.username}">
-          <div class="user-avatar member">${initials}</div>
+        <div class="user-item" id="user-${escHtml(m.nickname)}">
+          <div class="user-avatar member">${getInitials(m.nickname)}</div>
           <div class="user-info">
             <div class="user-name">
               ${escHtml(m.nickname)}
               ${isMe ? '<span style="color:var(--text-dim);font-size:10px"> (나)</span>' : ""}
             </div>
+            ${m.isEditing ? '<div class="user-status editing">수정 중</div>' : ""}
           </div>
-          ${canKick ? `<button class="user-menu-btn" onclick="openUserMenu(event,'${m.username}')">⋯</button>` : ""}
+          ${canKick ? `<button class="user-menu-btn" onclick="openUserMenu(event,'${escHtml(m.nickname)}')">⋯</button>` : ""}
         </div>`;
     }
     html += "</div>";
@@ -236,13 +217,8 @@ function renderUsers() {
 
   list.innerHTML = html;
 
-  // 프로젝트장만 하단 버튼 노출
   const bottom = document.getElementById("panel-bottom");
-  if (currentUser.role === "owner") {
-    bottom.style.display = "flex";
-  } else {
-    bottom.style.display = "none";
-  }
+  bottom.style.display = currentUser.role === "owner" ? "flex" : "none";
 }
 
 // ── 파일 트리 ────────────────────────────────────────────────
@@ -259,7 +235,9 @@ function buildTreeHTML(nodes, depth, parentPath) {
   const indent = depth > 0 ? `indent-${Math.min(depth, 3)}` : "";
 
   for (const node of nodes) {
-    const nodePath = parentPath ? `${parentPath}::${node.name}` : node.name;
+    const nodePath = parentPath
+      ? `${parentPath}::${node.file_id}`
+      : node.file_id;
 
     if (node.type === "folder") {
       const arrow = node.open ? "▾" : "▸";
@@ -268,7 +246,7 @@ function buildTreeHTML(nodes, depth, parentPath) {
           <span class="tree-icon">${arrow}</span>
           <span class="tree-name">${escHtml(node.name)}</span>
           <span class="tree-add-btn"
-                onclick="event.stopPropagation(); openTreeCtx(event,'${nodePath}')"
+                onclick="event.stopPropagation(); openTreeCtx(event,'${node.file_id}')"
                 title="이 폴더에 추가">+</span>
         </div>`;
       if (node.open && node.children) {
@@ -280,8 +258,8 @@ function buildTreeHTML(nodes, depth, parentPath) {
         ? `<span class="editing-tag">@${escHtml(node.editingBy)}</span>`
         : "";
       html += `
-        <div class="tree-item file ${indent} ${activeFile?.name === node.name ? "active" : ""}"
-             onclick="openFile('${escHtml(node.name)}')">
+        <div class="tree-item file ${indent} ${activeFile?.file_id === node.file_id ? "active" : ""}"
+             onclick="openFile('${node.file_id}')">
           <span class="tree-icon">${icon}</span>
           <span class="tree-name">${escHtml(node.name)}</span>
           ${editTag}
@@ -291,20 +269,9 @@ function buildTreeHTML(nodes, depth, parentPath) {
   return html;
 }
 
-function findNodeByPath(path) {
-  const parts = path.split("::");
-  let nodes = fileTree,
-    node = null;
-  for (const part of parts) {
-    node = nodes.find((n) => n.name === part);
-    if (!node) return null;
-    if (node.children) nodes = node.children;
-  }
-  return node;
-}
-
 function toggleFolder(path) {
-  const node = findNodeByPath(path);
+  const id = path.split("::").pop();
+  const node = fileNodeMap[id];
   if (node) {
     node.open = !node.open;
     renderFileTree();
@@ -332,37 +299,59 @@ function fileIcon(ext) {
 }
 
 // ── 파일 열기 ────────────────────────────────────────────────
-function openFile(filename) {
-  const node = findNode(fileTree, filename);
-  if (!node) return;
+async function openFile(fileId) {
+  const token = sessionStorage.getItem("access_token");
+  const node = fileNodeMap[fileId];
+  if (!node || node.type !== "file") return;
 
-  // 수정 중이면 완료 처리
-  if (isEditingNow && activeFile) finishEdit(false);
+  // 다른 파일 수정 중이면 먼저 완료
+  if (isEditingNow && activeFile) await finishEdit(false);
 
-  activeFile = node;
-  renderFileTree();
-  renderTabs();
-  renderToolbar();
-  renderCode();
-}
+  try {
+    const res = await fetch(`${API_BASE}/api:8000/request_file_open`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ project_id: projectInfo.id, file_uid: fileId }),
+    });
+    const data = await res.json();
 
-function findNode(nodes, filename) {
-  for (const n of nodes) {
-    if (n.type === "file" && n.name === filename) return n;
-    if (n.children) {
-      const found = findNode(n.children, filename);
-      if (found) return found;
+    if (!data.success) {
+      // 409: 다른 사용자 수정 중
+      if (res.status === 409 || (data.file && data.editing_users?.length > 0)) {
+        const who = data.detail?.editing_users || data.editing_users || [];
+        node.editingBy = who[0] || "다른 사용자";
+      } else {
+        alert(data.message || "파일을 열 수 없습니다.");
+      }
+      renderFileTree();
+      return;
     }
+
+    fileCodes[fileId] = data.file.content || "";
+    node.editingBy =
+      data.editing_users?.length > 0 ? data.editing_users[0] : null;
+
+    activeFile = node;
+    renderFileTree();
+    renderTabs();
+    renderToolbar();
+    renderCode();
+  } catch (e) {
+    console.error("파일 열기 실패:", e);
   }
-  return null;
 }
 
+// ── 탭 / 툴바 / 코드 렌더 ────────────────────────────────────
 function renderTabs() {
   const tabs = document.getElementById("editor-tabs");
   if (!activeFile) {
     tabs.innerHTML = "";
     return;
   }
+
   const ext = activeFile.name.split(".").pop();
   const colorMap = {
     java: "#f97316",
@@ -374,10 +363,9 @@ function renderTabs() {
     yml: "#6b7280",
     gradle: "#22c55e",
   };
-  const color = colorMap[ext] || "#6b7280";
   tabs.innerHTML = `
     <div class="editor-tab active">
-      <span class="tab-dot" style="background:${color}"></span>
+      <span class="tab-dot" style="background:${colorMap[ext] || "#6b7280"}"></span>
       ${escHtml(activeFile.name)}
     </div>`;
 }
@@ -390,10 +378,12 @@ function renderToolbar() {
   }
 
   const isEditingByOther =
-    activeFile.editingBy && activeFile.editingBy !== currentUser.username;
-  const isMeEditing = activeFile.editingBy === currentUser.username;
+    activeFile.editingBy && activeFile.editingBy !== currentUser.nickname;
+  const isMeEditing = activeFile.editingBy === currentUser.nickname;
+  const logCount = editLogs.filter(
+    (l) => l.target_node_name === activeFile.name,
+  ).length;
 
-  const logCount = (editLogs[activeFile.name] || []).length;
   const logBtn = `
     <button class="btn-log" onclick="openLogPanel()" title="수정 로그">
       📋 수정 로그${logCount > 0 ? ` <span class="log-count">${logCount}</span>` : ""}
@@ -423,10 +413,10 @@ function renderCode() {
     return;
   }
 
-  const code = fileCodes[activeFile.name] || "";
+  const code = fileCodes[activeFile.file_id] || "";
   const lines = code.split("\n");
   const lineNums = lines.map((_, i) => i + 1).join("\n");
-  const isMeEditing = activeFile.editingBy === currentUser.username;
+  const isMeEditing = activeFile.editingBy === currentUser.nickname;
   const isEditingByOther = activeFile.editingBy && !isMeEditing;
 
   area.innerHTML = `
@@ -466,174 +456,173 @@ function syncLineNumbers() {
       .split("\n")
       .map((_, i) => i + 1)
       .join("\n");
-  fileCodes[activeFile.name] = editor.value;
+  fileCodes[activeFile.file_id] = editor.value;
 }
 
 // ── 수정 토글 ────────────────────────────────────────────────
-function toggleEdit() {
+async function toggleEdit() {
   if (!activeFile) return;
   if (isEditingNow) {
-    finishEdit(true);
+    await finishEdit(true);
   } else {
-    // 수정 시작 — 스냅샷 저장
-    codeSnapshot = fileCodes[activeFile.name] || "";
-    activeFile.editingBy = currentUser.username;
-    isEditingNow = true;
-    renderFileTree();
-    renderToolbar();
-    renderCode();
-    document.getElementById("code-editor")?.focus();
+    await startEdit();
   }
 }
 
-function finishEdit(saveLog) {
-  if (!activeFile) return;
-  const newCode = fileCodes[activeFile.name] || "";
+async function startEdit() {
+  const token = sessionStorage.getItem("access_token");
+  codeSnapshot = fileCodes[activeFile.file_id] || "";
+  activeFile.editingBy = currentUser.nickname;
+  isEditingNow = true;
 
-  if (saveLog) {
-    const diff = computeDiff(codeSnapshot, newCode);
-    if (diff.length > 0) {
-      if (!editLogs[activeFile.name]) editLogs[activeFile.name] = [];
-      editLogs[activeFile.name].push({
-        who: currentUser.nickname,
-        when: new Date(),
-        diff,
-      });
-    }
+  renderFileTree();
+  renderToolbar();
+  renderCode();
+  document.getElementById("code-editor")?.focus();
+
+  // 하트비트 10초 주기 시작
+  heartbeatTimer = setInterval(() => sendHeartbeat(token), 10000);
+}
+
+async function finishEdit(save) {
+  const token = sessionStorage.getItem("access_token");
+  if (!activeFile) return;
+
+  const newCode = fileCodes[activeFile.file_id] || "";
+
+  // 하트비트 중단
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
   }
+
+  if (save && newCode !== codeSnapshot) {
+    await saveFile(token, projectInfo.id, activeFile.file_id, newCode);
+    // 저장 후 서버 로그 갱신
+    await refreshLogs(token, projectInfo.id);
+  }
+
+  // 편집 상태 서버에 해제
+  await releaseFile(token, projectInfo.id, activeFile.file_id);
 
   activeFile.editingBy = null;
   isEditingNow = false;
   codeSnapshot = "";
+
   renderFileTree();
   renderToolbar();
   renderCode();
 }
 
-// ── Diff 계산 ─────────────────────────────────────────────────
-// 줄 단위 Myers diff (간소화 버전)
-// 반환: [{ type: 'add'|'del'|'mod', line: number, content: string }, ...]
-function computeDiff(oldCode, newCode) {
-  const oldLines = oldCode.split("\n");
-  const newLines = newCode.split("\n");
-  const result = [];
-
-  const lcs = buildLCS(oldLines, newLines);
-  let oi = 0,
-    ni = 0,
-    li = 0;
-
-  while (oi < oldLines.length || ni < newLines.length) {
-    if (
-      oi < oldLines.length &&
-      ni < newLines.length &&
-      li < lcs.length &&
-      oldLines[oi] === lcs[li] &&
-      newLines[ni] === lcs[li]
-    ) {
-      // 공통 줄 — 변화 없음
-      oi++;
-      ni++;
-      li++;
-    } else if (
-      ni < newLines.length &&
-      (li >= lcs.length || newLines[ni] !== lcs[li])
-    ) {
-      // 추가된 줄
-      result.push({ type: "add", line: ni + 1, content: newLines[ni] });
-      ni++;
-    } else if (
-      oi < oldLines.length &&
-      (li >= lcs.length || oldLines[oi] !== lcs[li])
-    ) {
-      // 삭제된 줄
-      result.push({ type: "del", line: oi + 1, content: oldLines[oi] });
-      oi++;
-    } else {
-      oi++;
-      ni++;
-    }
+// ── 파일 저장 API ─────────────────────────────────────────────
+async function saveFile(token, projectId, fileId, content) {
+  try {
+    const res = await fetch(`${API_BASE}/api:8000/request_file_save`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        project_id: projectId,
+        file_uid: fileId,
+        content,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) console.error("파일 저장 실패:", data.message);
+  } catch (e) {
+    console.error("파일 저장 오류:", e);
   }
-
-  return result;
 }
 
-function buildLCS(a, b) {
-  const m = a.length,
-    n = b.length;
-  // 메모리 절약을 위해 500줄 이상이면 간소화
-  if (m > 500 || n > 500) return [];
-  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] =
-        a[i - 1] === b[j - 1]
-          ? dp[i - 1][j - 1] + 1
-          : Math.max(dp[i - 1][j], dp[i][j - 1]);
-
-  const lcs = [];
-  let i = m,
-    j = n;
-  while (i > 0 && j > 0) {
-    if (a[i - 1] === b[j - 1]) {
-      lcs.unshift(a[i - 1]);
-      i--;
-      j--;
-    } else if (dp[i - 1][j] > dp[i][j - 1]) i--;
-    else j--;
+// ── 하트비트 API ──────────────────────────────────────────────
+async function sendHeartbeat(token) {
+  if (!activeFile || !isEditingNow) return;
+  try {
+    await fetch(`${API_BASE}/api:8000/request_file_heartbeat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        project_id: projectInfo.id,
+        file_uid: activeFile.file_id,
+      }),
+    });
+  } catch (e) {
+    console.error("하트비트 실패:", e);
   }
-  return lcs;
+}
+
+// ── 편집 해제 API ─────────────────────────────────────────────
+async function releaseFile(token, projectId, fileId) {
+  try {
+    await fetch(`${API_BASE}/api:8000/request_file_release`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ project_id: projectId, file_uid: fileId }),
+    });
+  } catch (e) {
+    console.error("편집 해제 실패:", e);
+  }
+}
+
+// ── 로그 갱신 ────────────────────────────────────────────────
+async function refreshLogs(token, projectId) {
+  try {
+    const res = await fetch(`${API_BASE}/api:8000/request_project_open`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+    const data = await res.json();
+    if (data.success) editLogs = data.logs || [];
+    renderToolbar(); // 로그 카운트 갱신
+  } catch (e) {
+    console.error("로그 갱신 실패:", e);
+  }
 }
 
 // ── 수정 로그 패널 ────────────────────────────────────────────
 function openLogPanel() {
   if (!activeFile) return;
-  const logs = editLogs[activeFile.name] || [];
+  const logs = editLogs.filter((l) => l.target_node_name === activeFile.name);
   const overlay = document.getElementById("log-overlay");
   const content = document.getElementById("log-content");
-  const title = document.getElementById("log-title");
-
-  title.textContent = `수정 로그 — ${activeFile.name}`;
+  document.getElementById("log-title").textContent =
+    `수정 로그 — ${activeFile.name}`;
 
   if (logs.length === 0) {
     content.innerHTML = `<div class="log-empty">아직 수정 기록이 없습니다.</div>`;
   } else {
     content.innerHTML = [...logs]
       .reverse()
-      .map((log, i) => {
-        const timeStr = formatTime(log.when);
-        const adds = log.diff.filter((d) => d.type === "add").length;
-        const dels = log.diff.filter((d) => d.type === "del").length;
-        const diffHTML = log.diff
-          .map(
-            (d) => `
-        <div class="diff-line ${d.type}">
-          <span class="diff-lnum">${d.line}</span>
-          <span class="diff-prefix">${d.type === "add" ? "+" : "-"}</span>
-          <span class="diff-content">${escHtml(d.content)}</span>
-        </div>`,
-          )
-          .join("");
-
-        return `
-        <div class="log-entry" id="log-entry-${i}">
-          <div class="log-entry-header" onclick="toggleLogEntry(${i})">
-            <div class="log-entry-who">
-              <span class="log-avatar">${getInitials(log.who)}</span>
-              <span class="log-nickname">${escHtml(log.who)}</span>
-            </div>
-            <div class="log-entry-meta">
-              <span class="log-stat add">+${adds}</span>
-              <span class="log-stat del">-${dels}</span>
-              <span class="log-time">${timeStr}</span>
-              <span class="log-arrow" id="log-arrow-${i}">▾</span>
-            </div>
+      .map(
+        (log, i) => `
+      <div class="log-entry" id="log-entry-${i}">
+        <div class="log-entry-header" onclick="toggleLogEntry(${i})">
+          <div class="log-entry-who">
+            <span class="log-avatar">${getInitials(log.user_nickname)}</span>
+            <span class="log-nickname">${escHtml(log.user_nickname)}</span>
           </div>
-          <div class="log-diff" id="log-diff-${i}">
-            <div class="diff-block">${diffHTML}</div>
+          <div class="log-entry-meta">
+            <span class="log-time">${formatTime(log.timestamp)}</span>
+            <span class="log-arrow" id="log-arrow-${i}">▾</span>
           </div>
-        </div>`;
-      })
+        </div>
+        <div class="log-diff" id="log-diff-${i}">
+          <div class="diff-block">${escHtml(log.message)}</div>
+        </div>
+      </div>`,
+      )
       .join("");
   }
 
@@ -661,58 +650,106 @@ function handleLogOverlay(e) {
   if (e.target === document.getElementById("log-overlay")) closeLogPanel();
 }
 
-function formatTime(date) {
-  const d = new Date(date);
-  const pad = (n) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ` +
-    `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  );
-}
-
-// ── 파일/폴더 추가 ───────────────────────────────────────────
-function addFile(folderPath) {
+// ── 파일 / 폴더 추가 ─────────────────────────────────────────
+async function addFile(parentId) {
+  const token = sessionStorage.getItem("access_token");
   const name = prompt("파일 이름을 입력하세요 (예: MyClass.java)");
   if (!name?.trim()) return;
-  const node = { type: "file", name: name.trim(), editingBy: null };
-  if (!folderPath) {
-    fileTree.push(node);
-  } else {
-    const folder = findNodeByPath(folderPath);
-    if (folder?.type === "folder") {
-      folder.children.push(node);
-      folder.open = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/api:8000/request_file_create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        project_id: projectInfo.id,
+        file_name: name.trim(),
+        parent_node_id: parentId || null,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.message || "파일 생성 실패");
+      return;
     }
+
+    const node = {
+      file_id: data.file.file_id,
+      name: data.file.file_name,
+      type: "file",
+      editingBy: null,
+    };
+    fileNodeMap[node.file_id] = node;
+
+    if (parentId && fileNodeMap[parentId]) {
+      fileNodeMap[parentId].children.push(node);
+      fileNodeMap[parentId].open = true;
+    } else {
+      fileTree.push(node);
+    }
+    renderFileTree();
+  } catch (e) {
+    console.error("파일 생성 오류:", e);
   }
-  renderFileTree();
 }
 
-function addFolder(folderPath) {
+async function addFolder(parentId) {
+  const token = sessionStorage.getItem("access_token");
   const name = prompt("폴더 이름을 입력하세요");
   if (!name?.trim()) return;
-  const node = { type: "folder", name: name.trim(), open: true, children: [] };
-  if (!folderPath) {
-    fileTree.push(node);
-  } else {
-    const folder = findNodeByPath(folderPath);
-    if (folder?.type === "folder") {
-      folder.children.push(node);
-      folder.open = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/api:8000/request_directory_create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        project_id: projectInfo.id,
+        directory_name: name.trim(),
+        parent_node_id: parentId || null,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.message || "폴더 생성 실패");
+      return;
     }
+
+    const node = {
+      file_id: data.directory.directory_id,
+      name: data.directory.directory_name,
+      type: "folder",
+      open: true,
+      children: [],
+    };
+    fileNodeMap[node.file_id] = node;
+
+    if (parentId && fileNodeMap[parentId]) {
+      fileNodeMap[parentId].children.push(node);
+      fileNodeMap[parentId].open = true;
+    } else {
+      fileTree.push(node);
+    }
+    renderFileTree();
+  } catch (e) {
+    console.error("폴더 생성 오류:", e);
   }
-  renderFileTree();
 }
 
 // ── 컨텍스트 메뉴 ────────────────────────────────────────────
-function openTreeCtx(e, folderPath) {
+function openTreeCtx(e, folderId) {
   e.stopPropagation();
   closeCtxMenu();
   const menu = document.createElement("div");
   menu.className = "ctx-menu";
   menu.id = "ctx-menu";
   menu.innerHTML = `
-    <div class="ctx-item" onclick="addFile('${folderPath}'); closeCtxMenu()">📄 파일 추가</div>
-    <div class="ctx-item" onclick="addFolder('${folderPath}'); closeCtxMenu()">📁 폴더 추가</div>`;
+    <div class="ctx-item" onclick="addFile('${folderId}'); closeCtxMenu()">📄 파일 추가</div>
+    <div class="ctx-item" onclick="addFolder('${folderId}'); closeCtxMenu()">📁 폴더 추가</div>`;
   const { x, y } = calcMenuPos(e, 170, 80);
   menu.style.top = y + "px";
   menu.style.left = x + "px";
@@ -723,7 +760,7 @@ function openTreeCtx(e, folderPath) {
   );
 }
 
-function openUserMenu(e, username) {
+function openUserMenu(e, nickname) {
   e.stopPropagation();
   closeCtxMenu();
   const menu = document.createElement("div");
@@ -731,7 +768,7 @@ function openUserMenu(e, username) {
   menu.id = "ctx-menu";
   menu.innerHTML = ctxItem(
     "프로젝트에서 추방",
-    () => kickMember(username),
+    () => kickMember(nickname),
     true,
   );
   const { x, y } = calcMenuPos(e, 170, 60);
@@ -756,9 +793,7 @@ function ctxItem(label, action, danger = false) {
   }, 0);
   return `<div class="ctx-item${danger ? " danger" : ""}" id="${id}">${label}</div>`;
 }
-function ctxSep() {
-  return '<div class="ctx-sep"></div>';
-}
+
 function closeCtxMenu() {
   document.getElementById("ctx-menu")?.remove();
 }
@@ -775,11 +810,122 @@ function calcMenuPos(e, menuWidth = 170, menuHeight = 80) {
   return { x, y };
 }
 
-function kickMember(username) {
-  const idx = members.findIndex((m) => m.username === username);
-  if (idx !== -1) {
-    members.splice(idx, 1);
+// ── 멤버 추방 ─────────────────────────────────────────────────
+async function kickMember(nickname) {
+  const token = sessionStorage.getItem("access_token");
+  if (!confirm(`"${nickname}" 님을 프로젝트에서 추방하시겠습니까?`)) return;
+
+  try {
+    const res = await fetch(
+      `${API_BASE}/api:8000/request_project_remove_member`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          project_id: projectInfo.id,
+          target_nickname: nickname,
+        }),
+      },
+    );
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.message || "추방 실패");
+      return;
+    }
+
+    members = members.filter((m) => m.nickname !== nickname);
     renderUsers();
+  } catch (e) {
+    console.error("추방 실패:", e);
+  }
+}
+
+// ── 초대 모달 ────────────────────────────────────────────────
+function openInviteModal() {
+  document.getElementById("invite-overlay").classList.add("open");
+  document.getElementById("invite-nickname-input").value = "";
+  const hint = document.getElementById("invite-hint");
+  hint.textContent = "";
+  hint.className = "invite-hint info";
+  document.getElementById("btn-invite-send").disabled = true;
+  document.getElementById("invite-nickname-input").focus();
+}
+
+function closeInviteModal() {
+  document.getElementById("invite-overlay").classList.remove("open");
+}
+
+function handleInviteOverlay(e) {
+  if (e.target === document.getElementById("invite-overlay"))
+    closeInviteModal();
+}
+
+function validateInviteNickname() {
+  const value = document.getElementById("invite-nickname-input").value.trim();
+  const hint = document.getElementById("invite-hint");
+  const btn = document.getElementById("btn-invite-send");
+
+  if (!value) {
+    hint.textContent = "";
+    hint.className = "invite-hint info";
+    btn.disabled = true;
+    return;
+  }
+
+  const already = members.find((m) => m.nickname === value);
+  if (already) {
+    hint.textContent = "이미 프로젝트에 참가 중인 멤버입니다.";
+    hint.className = "invite-hint fail";
+    btn.disabled = true;
+    return;
+  }
+  if (value === currentUser.nickname) {
+    hint.textContent = "자기 자신은 초대할 수 없습니다.";
+    hint.className = "invite-hint fail";
+    btn.disabled = true;
+    return;
+  }
+
+  hint.textContent = `"${value}" 에게 초대를 보냅니다.`;
+  hint.className = "invite-hint ok";
+  btn.disabled = false;
+}
+
+async function sendInvite() {
+  const token = sessionStorage.getItem("access_token");
+  const nickname = document
+    .getElementById("invite-nickname-input")
+    .value.trim();
+  const hint = document.getElementById("invite-hint");
+  if (!nickname) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api:8000/request_invite_send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ project_id: projectInfo.id, nickname }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      hint.textContent = data.message || "초대 실패";
+      hint.className = "invite-hint fail";
+      return;
+    }
+
+    hint.textContent = `✓ "${nickname}" 에게 초대를 보냈습니다!`;
+    hint.className = "invite-hint ok";
+    document.getElementById("btn-invite-send").disabled = true;
+    document.getElementById("invite-nickname-input").value = "";
+    setTimeout(closeInviteModal, 1200);
+  } catch (e) {
+    hint.textContent = "서버와 연결할 수 없습니다.";
+    hint.className = "invite-hint fail";
   }
 }
 
@@ -800,11 +946,30 @@ function handleDeleteOverlay(e) {
     closeDeleteModal();
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (document.getElementById("delete-input").value !== "삭제") return;
-  // TODO: API 연결
-  alert("[DEV] 프로젝트가 삭제되었습니다.");
-  window.location.href = "project.html";
+  const token = sessionStorage.getItem("access_token");
+
+  try {
+    const res = await fetch(`${API_BASE}/api:8000/request_project_delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ project_id: projectInfo.id }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.message || "삭제 실패");
+      return;
+    }
+
+    clearInterval(pollTimer);
+    window.location.href = "project.html";
+  } catch (e) {
+    alert("서버와 연결할 수 없습니다.");
+  }
 }
 
 // ── 유틸 ─────────────────────────────────────────────────────
@@ -824,84 +989,16 @@ function getInitials(nickname) {
   return nickname.slice(0, /[가-힣]/.test(nickname) ? 1 : 2).toUpperCase();
 }
 
+function formatTime(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeDeleteModal();
     closeLogPanel();
+    closeInviteModal();
   }
 });
-
-// ── 사용자 초대 모달 ─────────────────────────────────────────
-function openInviteModal() {
-  document.getElementById("invite-overlay").classList.add("open");
-  document.getElementById("invite-nickname-input").value = "";
-  const hint = document.getElementById("invite-hint");
-  hint.textContent = "";
-  hint.className = "invite-hint info";
-  document.getElementById("btn-invite-send").disabled = true;
-  document.getElementById("invite-nickname-input").focus();
-}
-
-function closeInviteModal() {
-  document.getElementById("invite-overlay").classList.remove("open");
-}
-
-function handleInviteOverlay(e) {
-  if (e.target === document.getElementById("invite-overlay"))
-    closeInviteModal();
-}
-
-// 닉네임 입력할 때마다 실시간 확인
-function validateInviteNickname() {
-  const value = document.getElementById("invite-nickname-input").value.trim();
-  const hint = document.getElementById("invite-hint");
-  const btn = document.getElementById("btn-invite-send");
-
-  if (!value) {
-    hint.textContent = "";
-    hint.className = "invite-hint info";
-    btn.disabled = true;
-    return;
-  }
-
-  // 이미 참가 중인 멤버인지 확인
-  const already = members.find((m) => m.nickname === value);
-  if (already) {
-    hint.textContent = "이미 프로젝트에 참가 중인 멤버입니다.";
-    hint.className = "invite-hint fail";
-    btn.disabled = true;
-    return;
-  }
-
-  // 자기 자신인지 확인
-  if (value === currentUser.nickname) {
-    hint.textContent = "자기 자신은 초대할 수 없습니다.";
-    hint.className = "invite-hint fail";
-    btn.disabled = true;
-    return;
-  }
-
-  hint.textContent = `"${value}" 에게 초대를 보냅니다.`;
-  hint.className = "invite-hint ok";
-  btn.disabled = false;
-}
-
-function sendInvite() {
-  const nickname = document
-    .getElementById("invite-nickname-input")
-    .value.trim();
-  const hint = document.getElementById("invite-hint");
-
-  if (!nickname) return;
-
-  // TODO: API 연결
-  // await request_invite(token, projectId, nickname);
-
-  // [DEV] Mock — 실제로는 상대방 초대목록에 들어가는 것이라 내 화면엔 변화 없음
-  hint.textContent = `✓ "${nickname}" 에게 초대를 보냈습니다!`;
-  hint.className = "invite-hint ok";
-  document.getElementById("btn-invite-send").disabled = true;
-  document.getElementById("invite-nickname-input").value = "";
-
-  setTimeout(closeInviteModal, 1200);
-}
