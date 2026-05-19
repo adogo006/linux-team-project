@@ -1,0 +1,72 @@
+/* ── common.css — CodeSync 공통 스타일 ── */
+
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Pretendard:wght@300;400;500;600;700&display=swap");
+
+:root {
+  --bg: #0d0f14;
+  --surface: #161920;
+  --surface2: #1e2229;
+  --surface3: #252b35;
+  --border: #2a2f3a;
+  --text: #e8eaf0;
+  --text-muted: #6b7280;
+  --text-dim: #3d4450;
+  --green: #22c55e;
+  --green-dark: #16a34a;
+  --blue: #3b82f6;
+  --blue-dark: #2563eb;
+  --orange: #f97316;
+  --orange-dark: #ea6c0a;
+  --red: #f87171;
+  --yellow: #facc15;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-body: "Pretendard", sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 격자 배경 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 카드 진입 애니메이션 */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 상태 메시지 (로그인·회원가입 공용) */
+.status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  min-height: 16px;
+  text-align: center;
+}
+.status.error {
+  color: var(--red);
+}
+.status.success {
+  color: var(--green);
+}

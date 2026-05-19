@@ -11,7 +11,11 @@ services:
     networks:
       - linux-project-net
     volumes:
+<<<<<<< HEAD
       - postgres-linux-team-data:/var/lib/postgresql/data # 데이터 보존을 위한 볼륨
+=======
+      - postgres-data:/var/lib/postgresql/data # 데이터 보존을 위한 볼륨
+>>>>>>> connection_2
 
   api:
     build:
@@ -46,7 +50,11 @@ services:
       - db
   
 volumes:
+<<<<<<< HEAD
   postgres-linux-team-data:
+=======
+  postgres-data:
+>>>>>>> connection_2
 
 networks:
   linux-project-net:
