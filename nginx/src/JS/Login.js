@@ -1,10 +1,7 @@
 // ── login.js ──
-
-const API_BASE = "http://YOUR_API_URL";
-
 // ── 로그인 요청 ───────────────────────────────────────────────
 async function request_login(id, password) {
-  const res = await fetch(`${API_BASE}/api:8000/request_login`, {
+  const res = await fetch(`/api/request_login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id, password }),
@@ -36,26 +33,25 @@ async function handleLogin() {
   try {
     const data = await request_login(id, pw);
 
-    sessionStorage.setItem("access_token", data.access_token);
-    sessionStorage.setItem("nickname", data.nickname); // 파싱 없이 바로 사용
+    if (data && data.success === true) {
+      sessionStorage.setItem("access_token", data.access_token);
+      sessionStorage.setItem("nickname", data.nickname); // 파싱 없이 바로 사용
+      sessionStorage.setItem("token_type", data.token_type);
 
-    status.textContent = "✓ 로그인 성공";
-    status.className = "status success";
+      status.textContent = "✓ 로그인 성공";
+      status.className = "status success";
 
-    window.location.href = "project.html";
+      window.location.href = "project.html";
+    }else{
+      status.textContent = "로그인 실패";
+      status.className = "status error";
+    }
+
   } catch (e) {
     const msg = e.message;
-    if (
-      msg === "존재하지 않는 아이디입니다." ||
-      msg === "비밀번호가 일치하지 않습니다."
-    ) {
-      status.textContent = msg;
-    } else if (msg === "INVALID_CREDENTIALS") {
-      status.textContent = "아이디 또는 비밀번호가 올바르지 않습니다.";
-    } else {
+      console.error("Login error:", msg);
       status.textContent =
         "서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.";
-    }
     status.className = "status error";
   }
 }
