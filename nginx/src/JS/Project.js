@@ -1,12 +1,10 @@
 // ── project.js ──
 
-const API_BASE = "http://YOUR_API_URL";
-
 // ── API 함수 ──────────────────────────────────────────────────
 
 // 프로젝트 목록 조회
 async function request_get_projects(token) {
-  const res = await fetch(`${API_BASE}/api:8000/request_project_list`, {
+  const res = await fetch(`/api/request_project_list`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -20,7 +18,7 @@ async function request_get_projects(token) {
 
 // 프로젝트 생성
 async function request_create_project(token, project_name) {
-  const res = await fetch(`${API_BASE}/api:8000/request_project_create`, {
+  const res = await fetch(`/api/request_project_create`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -35,7 +33,7 @@ async function request_create_project(token, project_name) {
 
 // 초대 목록 조회
 async function request_get_invites(token) {
-  const res = await fetch(`${API_BASE}/api:8000/request_invite_list`, {
+  const res = await fetch(`/api/request_invite_list`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -49,7 +47,7 @@ async function request_get_invites(token) {
 
 // 초대 수락 / 거절
 async function request_respond_invite(token, project_id, action) {
-  const res = await fetch(`${API_BASE}/api:8000/request_invite_respond`, {
+  const res = await fetch(`/api/request_invite_respond`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

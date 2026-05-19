@@ -112,3 +112,20 @@ class ProjectLog(Base):
 
     project = relationship("Project", back_populates="logs")
     user = relationship("User", back_populates="logs")
+
+# ==========================================
+# 6. 초대 요청 (invites_requests)
+# ==========================================
+class InviteRequest(Base):
+    __tablename__ = "invite_requests"
+
+    uid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True) # invite_id
+    project_uid = Column(UUID(as_uuid=True), ForeignKey("projects.uid", ondelete="CASCADE"), nullable=False)
+    inviter_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True) # 초대한 사람
+    invitee_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True) # 초대받는 사람
+
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    project = relationship("Project")
+    inviter = relationship("User", foreign_keys=[inviter_id])
+    invitee = relationship("User", foreign_keys=[invitee_id])

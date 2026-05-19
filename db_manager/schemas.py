@@ -89,3 +89,7 @@ class UserIdCheckRequest(BaseModel):
 
 class NicknameCheckRequest(BaseModel):
     nickname: str = Field(..., min_length=2, max_length=12)
+
+class RequestInviteRespond(BaseModel):
+    project_id: str = Field(..., description="프로젝트 고유 ID")
+    action: Literal["ACCEPT", "REJECT"] = Field(..., description="초대 수락 여부 (ACCEPT 또는 REJECT)")

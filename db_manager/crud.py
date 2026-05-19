@@ -96,6 +96,20 @@ def get_projects_by_user_id(db: Session, user_id: str):
     """호환용 별칭: 사용자 프로젝트 목록"""
     return get_project_list_by_user(db, user_id)
 
+def invite_project_member(db: Session, project_id: str, inviter_id: str, invitee_id: str):
+    """ 프로젝트에게 초대요청을 보냄 """
+    # 초대 요청 생성
+    invite_request = models.InviteRequest(
+        project_uid=project_id,
+        inviter_id=inviter_id,
+        invitee_id=invitee_id,
+    )
+    db.add(invite_request)
+    db.commit()
+    db.refresh(invite_request)
+    return invite_request
+
+
 
 def add_project_member(db: Session, project_id: str, user_id: str):
     """프로젝트 멤버 추가 (role은 호환용 파라미터로만 받음)."""
@@ -340,3 +354,16 @@ def get_project_logs(db: Session, project_id: str):
     return db.query(models.ProjectLog).filter(
         models.ProjectLog.project_uid == project_id
     ).order_by(models.ProjectLog.end_time.desc()).all()
+
+def get_invite_list(db: Session, user_id: str):
+    """특정 유저가 받은 프로젝트 초대 목록 조회"""
+    return db.query(models.InviteRequest).filter(
+        models.InviteRequest.invitee_id == user_id
+    ).all()
+
+def get_invite_by_id(db: Session, project_id: str, user_id: str):
+    """초대 요청 ID로 특정 초대 요청 조회"""
+    return db.query(models.InviteRequest).filter(
+        models.InviteRequest.project_uid == project_id,
+        models.InviteRequest.invitee_id == user_id
+    ).first()

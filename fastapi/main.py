@@ -79,7 +79,7 @@ def has_other_active_editor(file_uid: str, nickname: str):
 
 
 #회원가입 아이디 중복 체크
-@app.post("/api:8000/request_id_check")
+@app.post("/request_id_check")
 def request_id_check(payload: schemas.UserIdCheckRequest):
     db = SessionLocal()
     try:
@@ -91,7 +91,7 @@ def request_id_check(payload: schemas.UserIdCheckRequest):
         db.close()
 
 #회원가입 닉네임 중복 체크
-@app.post("/api:8000/request_nickname_check")
+@app.post("/request_nickname_check")
 def request_nickname_check(payload: schemas.NicknameCheckRequest):
     db = SessionLocal()
     try:
@@ -103,7 +103,7 @@ def request_nickname_check(payload: schemas.NicknameCheckRequest):
         db.close()
 
 #회원가입 요청 받기
-@app.post("/api:8000/request_register")
+@app.post("/request_register")
 def request_register(payload: schemas.RequestRegister):
     db = SessionLocal()
 
@@ -146,7 +146,7 @@ def request_register(payload: schemas.RequestRegister):
         db.close()
 
 #로그인 요청 받기, ResponseLogin 모델로 응답하기, JWT 토큰 생성해서 반환하기
-@app.post("/api:8000/request_login")
+@app.post("/request_login")
 def request_login(payload: schemas.RequestLogin):
     db = SessionLocal()
     try:
@@ -182,7 +182,7 @@ def request_login(payload: schemas.RequestLogin):
         db.close()        
 
 #세션용 토큰 유지
-@app.post("/api:8000/request_refresh")
+@app.post("/request_refresh")
 def request_refresh(authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     payload = token_module.verify_access_token(token_str)
@@ -199,7 +199,7 @@ def request_refresh(authorization: str | None = Header(None)):
     }
 
 #토큰 만료 및 유지 기능 로그아웃
-@app.post("/api:8000/request_logout")
+@app.post("/request_logout")
 def request_logout(authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_module.verify_access_token(token_str)
@@ -210,7 +210,7 @@ def request_logout(authorization: str | None = Header(None)):
     }
 
 #프로젝트 목록 조회
-@app.post("/api:8000/request_project_list")
+@app.post("/request_project_list")
 def request_project_list(authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -246,7 +246,7 @@ def request_project_list(authorization: str | None = Header(None)):
         db.close()
 
 #새 프로젝트 생성
-@app.post("/api:8000/request_project_create")
+@app.post("/request_project_create")
 def request_project_create(payload: schemas.RequestProjectCreate, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -287,7 +287,7 @@ def request_project_create(payload: schemas.RequestProjectCreate, authorization:
         db.close()
 
 #프로젝트 열기
-@app.post("/api:8000/request_project_open")
+@app.post("/request_project_open")
 def request_project_open(payload: schemas.RequestProjectOpen, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -348,7 +348,7 @@ def request_project_open(payload: schemas.RequestProjectOpen, authorization: str
         db.close()
 
 #파일 생성
-@app.post("/api:8000/request_file_create")
+@app.post("/request_file_create")
 def request_file_create(payload: schemas.RequestFileCreate, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -405,7 +405,7 @@ def request_file_create(payload: schemas.RequestFileCreate, authorization: str |
         db.close()
 
 #디렉토리 생성
-@app.post("/api:8000/request_directory_create")
+@app.post("/request_directory_create")
 def request_directory_create(payload: schemas.RequestDirectoryCreate, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -459,7 +459,7 @@ def request_directory_create(payload: schemas.RequestDirectoryCreate, authorizat
         db.close()
     
 #파일 열기
-@app.post("/api:8000/request_file_open")
+@app.post("/request_file_open")
 def request_file_open(payload: schemas.RequestFileOpen, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -518,7 +518,7 @@ def request_file_open(payload: schemas.RequestFileOpen, authorization: str | Non
 
 
 #파일 편집 하트비트 갱신(프론트에서 10초마다 갱신 필요)
-@app.post("/api:8000/request_file_heartbeat")
+@app.post("/request_file_heartbeat")
 def request_file_heartbeat(payload: schemas.RequestFileAction, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -558,7 +558,7 @@ def request_file_heartbeat(payload: schemas.RequestFileAction, authorization: st
         db.close()
 
 #파일 편집 종료(명시적 해제)
-@app.post("/api:8000/request_file_release")
+@app.post("/request_file_release")
 def request_file_release(payload: schemas.RequestFileAction, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -597,7 +597,7 @@ def request_file_release(payload: schemas.RequestFileAction, authorization: str 
         db.close()
 
 #파일 저장
-@app.post("/api:8000/request_file_save")
+@app.post("/request_file_save")
 def request_file_save(payload: schemas.RequestFileSave, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -647,7 +647,7 @@ def request_file_save(payload: schemas.RequestFileSave, authorization: str | Non
         db.close()
 
 #디스플레이 이름 변경 (파일/디렉토리 공통)
-@app.post("/api:8000/request_node_rename")
+@app.post("/request_node_rename")
 def request_node_rename(payload: schemas.RequestNodeRename, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -694,7 +694,7 @@ def request_node_rename(payload: schemas.RequestNodeRename, authorization: str |
         db.close()
 
 #프로젝트 이름 변경( = 루트 디렉토리 이름 변경)
-@app.post("/api:8000/request_project_rename")
+@app.post("/request_project_rename")
 def request_project_rename(payload: schemas.RequestProjectRename, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -740,7 +740,7 @@ def request_project_rename(payload: schemas.RequestProjectRename, authorization:
         db.close()
 
 #프로젝트에 사용자 초대
-@app.post("/api:8000/request_project_invite")
+@app.post("/request_project_invite")
 def request_project_invite(payload: schemas.RequestProjectInvite, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -779,26 +779,19 @@ def request_project_invite(payload: schemas.RequestProjectInvite, authorization:
         if existing_membership:
             raise HTTPException(status_code=400, detail="사용자는 이미 프로젝트에 속해 있습니다.")
 
-        crud.add_project_member(db, payload.project_id, target_user.id)
-
-        crud.create_project_log(
-            db=db,
-            project_id=project.uid,
-            nickname=inviter.nickname,
-            action="PROJECT_INVITE",
-            message=f"{inviter.nickname}님이 {target_user.nickname}님을 프로젝트에 초대했습니다.",
-        )
+        crud.invite_project_member(db, payload.project_id, inviter.id, target_user.id)
+        
 
         return {
             "success": True,
-            "message": f"{target_user.nickname}님이 프로젝트에 초대되었습니다.",
+            "message": f"{target_user.nickname}님을 프로젝트에 초대되었습니다.",
         }
 
     finally:
         db.close()
 
 #프로젝트 멤버 추방
-@app.post("/api:8000/request_project_remove_member")
+@app.post("/request_project_remove_member")
 def request_project_remove_member(payload: schemas.RequestProjectRemoveMember, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -856,7 +849,7 @@ def request_project_remove_member(payload: schemas.RequestProjectRemoveMember, a
         db.close()
 
 #프로젝트 멤버 목록 조회 및 수정 중인 사용자 정보 반영
-@app.post("/api:8000/request_project_members")
+@app.post("/request_project_members")
 def request_project_members(payload: schemas.RequestProjectMembers, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -903,7 +896,7 @@ def request_project_members(payload: schemas.RequestProjectMembers, authorizatio
         db.close()
 
 #프로젝트 삭제
-@app.post("/api:8000/request_project_delete")
+@app.post("/request_project_delete")
 def request_project_delete(payload: schemas.RequestProjectOpen, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -958,7 +951,7 @@ def request_project_delete(payload: schemas.RequestProjectOpen, authorization: s
         db.close()
 
 #파일 삭제
-@app.post("/api:8000/request_file_delete")
+@app.post("/request_file_delete")
 def request_file_delete(payload: schemas.RequestFileDelete, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -1015,7 +1008,7 @@ def request_file_delete(payload: schemas.RequestFileDelete, authorization: str |
         db.close()
 
 #디렉토리 삭제
-@app.post("/api:8000/request_directory_delete")
+@app.post("/request_directory_delete")
 def request_directory_delete(payload: schemas.RequestDirectoryDelete, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -1074,5 +1067,87 @@ def request_directory_delete(payload: schemas.RequestDirectoryDelete, authorizat
             "message": "디렉토리가 삭제되었습니다.",
         }
 
+    finally:
+        db.close()
+
+#초대 목록 조회
+@app.post("/request_invite_list")
+def request_invite_list(authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        invites = crud.get_invite_list(db, user.id)
+        invite_list = []
+        for invite in invites:
+            invite_list.append({
+                "invite_id": invite.uid,
+                "project_id": invite.project_uid,
+                "project_name": invite.project.name,
+                "inviter_id": invite.inviter_id,
+                "invitee_id": invite.invitee_id,
+                "created_at": invite.created_at
+            })
+
+        return {
+            "success": True,
+            "invites": invite_list
+        }
+
+    finally:
+        db.close()
+
+@app.post("/request_invite_respond")
+def request_invite_respond(payload: schemas.RequestInviteRespond, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        invite = crud.get_invite_by_id(db, payload.project_id, user.id)
+
+        if not invite:
+            raise HTTPException(status_code=404, detail="초대를 찾을 수 없습니다.")
+
+        if invite.invitee_id != user.id:
+            raise HTTPException(status_code=403, detail="이 초대에 대한 권한이 없습니다.")
+
+        if payload.action == "ACCEPT":
+            crud.add_project_member(db, payload.project_id, user.id)
+            crud.create_project_log(
+                db=db,
+                project_id=payload.project_id,
+                nickname=invite.inviter.nickname,
+                action="PROJECT_INVITE",
+                message=f"{invite.inviter.nickname}님이 {user.nickname}님을 프로젝트에 초대했습니다.",
+            )
+            message = "초대를 수락했습니다."
+            db.delete(invite)
+            db.commit()
+            db.refresh(invite)
+        else:
+            db.delete(invite)
+            db.commit()
+            db.refresh(invite)
+            message = "초대를 거절했습니다."
+
+        return {
+            "success": True,
+            "message": message
+        }
     finally:
         db.close()
