@@ -8,9 +8,18 @@ let members = [];
 let fileTree = [];
 let fileNodeMap = {}; // { file_id: node 객체 }
 let editLogs = []; // 서버에서 받아온 프로젝트 로그
+let projectLogCount = 0;
+let lastRenderedProjectLogCount = -1;
+let isProjectLogCollapsed = sessionStorage.getItem("project-log-collapsed") === "1";
+const PROJECT_LOG_COLLAPSED_H = 44; // px
+const PROJECT_LOG_EXPANDED_H = 260; // px when auto-expanded by scroll
+let projectLogScrollHandlerAttached = false;
+let lastAppliedLogHeight = null;
 let activeFile = null; // 현재 열린 파일 노드
 let isEditingNow = false;
 let codeSnapshot = "";
+// whether the project log panel is currently visible (up from bottom)
+let isProjectLogVisible = false;
 
 let heartbeatTimer = null; // 파일 편집 하트비트 인터벌
 let pollTimer = null; // 멤버 폴링 인터벌
@@ -183,6 +192,7 @@ async function loadProject(token, projectId) {
 
   projectInfo.name = data.project.project_name;
   editLogs = data.logs || [];
+  projectLogCount = editLogs.length;
 
   // 파일 트리 변환 및 nodeMap 구성
   fileTree = buildTreeFromServer(data.file_tree);
@@ -193,6 +203,8 @@ async function loadProject(token, projectId) {
   renderNav();
   renderUsers();
   renderFileTree();
+  renderProjectLogs(true);
+  applyProjectLogPanelState(isProjectLogCollapsed, false);
   showEmpty();
 }
 
@@ -249,9 +261,14 @@ async function loadMembers(token, projectId) {
 async function pollMembers(token, projectId) {
   try {
     await loadMembers(token, projectId);
-    await refreshLogs(token, projectId);
   } catch (e) {
     console.error("멤버 폴링 실패:", e);
+  }
+
+  try {
+    await refreshLogs(token, projectId);
+  } catch (e) {
+    console.error("로그 폴링 실패:", e);
   }
 }
 
@@ -505,12 +522,10 @@ function renderToolbar() {
   const isEditingByOther =
     activeFile.editingBy && activeFile.editingBy !== currentUser.nickname;
   const isMeEditing = activeFile.editingBy === currentUser.nickname;
-  const logCount = editLogs.filter(
-    (l) => l.target_node_name === activeFile.name,
-  ).length;
+  const logCount = projectLogCount;
 
   const logBtn = `
-    <button class="btn-log" onclick="openLogPanel()" title="수정 로그">
+    <button class="btn-log" onclick="openLogPanel()" title="프로젝트 로그">
       📋 수정 로그${logCount > 0 ? ` <span class="log-count">${logCount}</span>` : ""}
     </button>`;
 
@@ -746,70 +761,204 @@ async function refreshLogs(token, projectId) {
       body: JSON.stringify({ project_id: projectId }),
     });
     const data = await res.json();
-    if (data.success) editLogs = data.logs || [];
+    if (!data.success) return;
+
+    editLogs = data.logs || [];
+    const nextCount = editLogs.length;
+    const countChanged = nextCount !== projectLogCount;
+    projectLogCount = nextCount;
+    renderProjectLogs(countChanged);
     renderToolbar(); // 로그 카운트 갱신
   } catch (e) {
     console.error("로그 갱신 실패:", e);
   }
 }
 
-// ── 수정 로그 패널 ────────────────────────────────────────────
-function openLogPanel() {
-  if (!activeFile) return;
-  const logs = editLogs.filter((l) => l.target_node_name === activeFile.name);
-  const overlay = document.getElementById("log-overlay");
-  const content = document.getElementById("log-content");
-  document.getElementById("log-title").textContent =
-    `수정 로그 — ${activeFile.name}`;
+// ── 프로젝트 로그 영역 ───────────────────────────────────────
+function renderProjectLogs(animateScroll = false) {
+  const content = document.getElementById("project-log-content");
+  const countBadge = document.getElementById("project-log-count");
+  if (!content || !countBadge) return;
 
+  countBadge.textContent = `${projectLogCount}개`;
+
+  const logs = [...editLogs].reverse();
   if (logs.length === 0) {
-    content.innerHTML = `<div class="log-empty">아직 수정 기록이 없습니다.</div>`;
-  } else {
-    content.innerHTML = [...logs]
-      .reverse()
-      .map(
-        (log, i) => `
-      <div class="log-entry" id="log-entry-${i}">
-        <div class="log-entry-header" onclick="toggleLogEntry(${i})">
+    content.innerHTML = `<div class="log-empty">아직 프로젝트 로그가 없습니다.</div>`;
+    lastRenderedProjectLogCount = projectLogCount;
+    return;
+  }
+
+  content.innerHTML = logs
+    .map(
+      (log) => `
+      <div class="log-entry project-log-entry">
+        <div class="log-entry-header">
           <div class="log-entry-who">
             <span class="log-avatar">${getInitials(log.user_nickname)}</span>
             <span class="log-nickname">${escHtml(log.user_nickname)}</span>
           </div>
           <div class="log-entry-meta">
+            ${log.action_type ? `<span class="log-stat ${getLogActionClass(log.action_type)}">${escHtml(log.action_type)}</span>` : ""}
             <span class="log-time">${formatTime(log.timestamp)}</span>
-            <span class="log-arrow" id="log-arrow-${i}">▾</span>
           </div>
         </div>
-        <div class="log-diff" id="log-diff-${i}">
+        <div class="log-diff">
           <div class="diff-block">${escHtml(log.message)}</div>
+          ${log.target_node_name ? `<div class="project-log-target">대상: ${escHtml(log.target_node_name)}</div>` : ""}
         </div>
       </div>`,
-      )
-      .join("");
+    )
+    .join("");
+
+  if (!isProjectLogCollapsed && animateScroll && projectLogCount !== lastRenderedProjectLogCount) {
+    requestAnimationFrame(() => {
+      content.scrollTo({
+        top: content.scrollHeight,
+        behavior: "smooth",
+      });
+    });
   }
 
-  overlay.classList.add("open");
+  lastRenderedProjectLogCount = projectLogCount;
+
+  // auto-scroll to bottom when logs change and panel is visible
+  if (isProjectLogVisible && animateScroll && projectLogCount !== lastRenderedProjectLogCount) {
+    requestAnimationFrame(() => {
+      content.scrollTo({ top: content.scrollHeight, behavior: "smooth" });
+    });
+  }
+}
+
+function getLogActionClass(actionType) {
+  if (!actionType) return "";
+  if (actionType.includes("CREATE")) return "add";
+  if (actionType.includes("DELETE")) return "del";
+  return "";
+}
+
+function scrollProjectLogsToBottom(animate = true) {
+  const content = document.getElementById("project-log-content");
+  if (!content) return;
+  content.scrollTo({
+    top: content.scrollHeight,
+    behavior: animate ? "smooth" : "auto",
+  });
+}
+
+function applyProjectLogPanelState(collapsed, persist = true) {
+  isProjectLogCollapsed = !!collapsed;
+  if (persist) {
+    sessionStorage.setItem("project-log-collapsed", isProjectLogCollapsed ? "1" : "0");
+  }
+
+  const panel = document.getElementById("project-log-panel");
+  const toggle = document.getElementById("project-log-toggle");
+  if (panel) panel.classList.toggle("collapsed", isProjectLogCollapsed);
+  if (toggle) {
+    toggle.textContent = isProjectLogCollapsed ? "▴" : "▾";
+    toggle.title = isProjectLogCollapsed ? "로그 펼치기" : "로그 접기";
+    toggle.setAttribute("aria-expanded", String(!isProjectLogCollapsed));
+  }
+  // reset inline height so CSS var controls take effect when toggling manually
+  if (panel) {
+    // when toggling state via this function, ensure panel is visible
+    panel.classList.remove("hidden");
+    if (isProjectLogCollapsed) {
+      panel.style.height = PROJECT_LOG_COLLAPSED_H + "px";
+      panel.style.maxHeight = PROJECT_LOG_COLLAPSED_H + "px";
+      lastAppliedLogHeight = PROJECT_LOG_COLLAPSED_H;
+    } else {
+      panel.style.height = "";
+      panel.style.maxHeight = "";
+      // clear last applied height so scroll-driven changes can take over
+      lastAppliedLogHeight = null;
+    }
+  }
+}
+
+function showProjectLogBase() {
+  const panel = document.getElementById("project-log-panel");
+  if (!panel) return;
+  // show panel at base (collapsed) height
+  panel.classList.remove("hidden");
+  panel.classList.add("collapsed");
+  panel.style.height = PROJECT_LOG_COLLAPSED_H + "px";
+  panel.style.maxHeight = PROJECT_LOG_COLLAPSED_H + "px";
+  lastAppliedLogHeight = PROJECT_LOG_COLLAPSED_H;
+  isProjectLogVisible = true;
+  requestAnimationFrame(() => scrollProjectLogsToBottom(true));
+}
+
+function hideProjectLog() {
+  const panel = document.getElementById("project-log-panel");
+  if (!panel) {
+    isProjectLogVisible = false;
+    return;
+  }
+  // hide the panel (slide down)
+  panel.classList.add("hidden");
+  panel.style.height = "";
+  panel.style.maxHeight = "";
+  panel.classList.remove("collapsed");
+  lastAppliedLogHeight = null;
+  isProjectLogVisible = false;
+  // update toggle button aria/state
+  const toggle = document.getElementById("project-log-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", "false");
+}
+
+function toggleProjectLogPanel() {
+  const panel = document.getElementById("project-log-panel");
+  if (!panel) return;
+  if (!isProjectLogVisible) {
+    // open to editor's height
+    const editorArea = document.getElementById("code-area");
+    const h = editorArea ? editorArea.clientHeight : PROJECT_LOG_EXPANDED_H;
+    panel.classList.remove("hidden");
+    panel.classList.remove("collapsed");
+    panel.style.height = h + "px";
+    panel.style.maxHeight = h + "px";
+    isProjectLogVisible = true;
+    lastAppliedLogHeight = h;
+    // scroll to bottom so latest logs visible
+    requestAnimationFrame(() => scrollProjectLogsToBottom(true));
+    const toggle = document.getElementById("project-log-toggle");
+    if (toggle) toggle.setAttribute("aria-expanded", "true");
+  } else {
+    hideProjectLog();
+  }
+}
+
+function openLogPanel() {
+  const panel = document.getElementById("project-log-panel");
+  if (!panel) return;
+  const editorArea = document.getElementById("code-area");
+  const h = editorArea ? editorArea.clientHeight : PROJECT_LOG_EXPANDED_H;
+  panel.classList.remove("hidden");
+  panel.classList.remove("collapsed");
+  panel.style.height = h + "px";
+  panel.style.maxHeight = h + "px";
+  isProjectLogVisible = true;
+  lastAppliedLogHeight = h;
+  requestAnimationFrame(() => scrollProjectLogsToBottom(true));
+}
+
+function onProjectLogScroll(e) {
+  // scroll-driven resizing disabled — kept for compatibility but no-op
+  return;
 }
 
 function toggleLogEntry(i) {
-  const diff = document.getElementById(`log-diff-${i}`);
-  const arrow = document.getElementById(`log-arrow-${i}`);
-  const open = diff.style.display !== "none" && diff.style.display !== "";
-  if (open || diff.style.display === "") {
-    diff.style.display = "none";
-    arrow.textContent = "▸";
-  } else {
-    diff.style.display = "block";
-    arrow.textContent = "▾";
-  }
+  void i;
 }
 
 function closeLogPanel() {
-  document.getElementById("log-overlay").classList.remove("open");
+  return;
 }
 
 function handleLogOverlay(e) {
-  if (e.target === document.getElementById("log-overlay")) closeLogPanel();
+  void e;
 }
 
 // ── 파일 / 폴더 추가 ─────────────────────────────────────────
@@ -1482,7 +1631,6 @@ function formatTime(ts) {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeDeleteModal();
-    closeLogPanel();
     closeInviteModal();
     closeActionModal(false);
   }

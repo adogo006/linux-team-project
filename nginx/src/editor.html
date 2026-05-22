@@ -43,6 +43,30 @@
             <span>파일을 선택하면 코드가 표시됩니다</span>
           </div>
         </div>
+        <div class="project-log-panel" id="project-log-panel">
+          <div class="project-log-header">
+            <div class="project-log-title">
+              프로젝트 로그 <span id="project-log-count">0개</span>
+            </div>
+            <div class="project-log-actions">
+              <button class="project-log-jump" onclick="openLogPanel()">
+                최신으로
+              </button>
+              <button
+                class="project-log-toggle"
+                id="project-log-toggle"
+                onclick="toggleProjectLogPanel()"
+                aria-expanded="true"
+                title="로그 접기"
+              >
+                ▾
+              </button>
+            </div>
+          </div>
+          <div class="project-log-content" id="project-log-content"></div>
+        </div>
+        <!-- persistent handle to reopen log panel when hidden -->
+        <button class="project-log-handle" id="project-log-handle" onclick="toggleProjectLogPanel()" aria-label="로그 열기">▴</button>
       </section>
 
       <!-- 오른쪽: 사용자 목록 -->
@@ -63,18 +87,6 @@
           </button>
         </div>
       </aside>
-    </div>
-
-    <!-- 수정 로그 패널 -->
-    <div class="log-overlay" id="log-overlay" onclick="handleLogOverlay(event)">
-      <div class="log-backdrop"></div>
-      <div class="log-panel">
-        <div class="log-panel-header">
-          <div class="log-panel-title" id="log-title">수정 로그</div>
-          <button class="log-close" onclick="closeLogPanel()">✕</button>
-        </div>
-        <div class="log-content" id="log-content"></div>
-      </div>
     </div>
 
     <!-- 사용자 초대 모달 -->
