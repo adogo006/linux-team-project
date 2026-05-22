@@ -509,7 +509,7 @@ def request_directory_create(payload: schemas.RequestDirectoryCreate, authorizat
     finally:
         db.close()
     
-#파일 열기
+#파일 열기(프로젝트id , 파일 id를 인자로 받음)
 @app.post("/request_file_open")
 def request_file_open(payload: schemas.RequestFileOpen, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
@@ -546,7 +546,7 @@ def request_file_open(payload: schemas.RequestFileOpen, authorization: str | Non
                 },
             )
 
-        touch_editing_user(file_node.uid, user.nickname)
+        # touch_editing_user(file_node.uid, user.nickname) # 하트비트 등록/갱신을 수정중인 상태에서만 해당하도록 변경 예정
 
         file_content = crud.read_file_content(db, file_node.uid)
 

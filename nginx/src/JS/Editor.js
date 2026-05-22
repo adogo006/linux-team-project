@@ -6,7 +6,6 @@ let currentUser = { nickname: "", role: "member" };
 let projectInfo = { id: "", name: "" };
 let members = [];
 let fileTree = [];
-let fileCodes = {}; // { file_id: "코드 내용" }
 let fileNodeMap = {}; // { file_id: node 객체 }
 let editLogs = []; // 서버에서 받아온 프로젝트 로그
 let activeFile = null; // 현재 열린 파일 노드
@@ -409,7 +408,7 @@ async function openFile(fileId) {
   const node = fileNodeMap[fileId];
   if (!node || node.type !== "file") return;
 
-  // 다른 파일 수정 중이면 먼저 완료
+  // 다른 파일 수정 중이면 먼저 완료??? 확인 필요한 함수
   if (isEditingNow && activeFile) await finishEdit(false);
 
   try {
@@ -435,15 +434,20 @@ async function openFile(fileId) {
       return;
     }
 
-    fileCodes[fileId] = data.file.content || "";
-    node.editingBy =
-      data.editing_users?.length > 0 ? data.editing_users[0] : null;
+    // server reports who is editing (if any) but do NOT enter local edit mode yet
+    // local edit mode is only enabled when the user presses the edit button
+    node.editingBy = data.editing_users?.length > 0 ? data.editing_users[0] : null;
 
     activeFile = node;
+    // ensure local edit flag is reset when opening a file
+    isEditingNow = false;
+    codeSnapshot = "";
+
     renderFileTree();
     renderTabs();
     renderToolbar();
-    renderCode();
+    // always render server content as read-only view initially
+    renderCode(data.file.content || "");
   } catch (e) {
     console.error("파일 열기 실패:", e);
   }
@@ -511,23 +515,24 @@ function renderToolbar() {
     ${editBtn}`;
 }
 
-function renderCode() {
+function renderCode(code = "") {
   const area = document.getElementById("code-area");
   if (!activeFile) {
     area.innerHTML = emptyState();
     return;
   }
 
-  const code = fileCodes[activeFile.file_id] || "";
   const lines = code.split("\n");
   const lineNums = lines.map((_, i) => i + 1).join("\n");
-  const isMeEditing = activeFile.editingBy === currentUser.nickname;
-  const isEditingByOther = activeFile.editingBy && !isMeEditing;
+  // If someone else is editing on the server, keep textarea disabled.
+  const isEditingByOther = activeFile.editingBy && activeFile.editingBy !== currentUser.nickname;
+  // Allow editing only when the local edit mode is active and nobody else is editing.
+  const isEditable = isEditingNow && !isEditingByOther;
 
   area.innerHTML = `
     <div class="line-numbers" id="line-numbers">${lineNums}</div>
     <textarea class="code-editor" id="code-editor"
-      ${!isMeEditing || isEditingByOther ? "disabled" : ""}
+      ${!isEditable ? "disabled" : ""}
       spellcheck="false"
       oninput="syncLineNumbers()"
     >${escHtml(code)}</textarea>`;
@@ -561,7 +566,6 @@ function syncLineNumbers() {
       .split("\n")
       .map((_, i) => i + 1)
       .join("\n");
-  fileCodes[activeFile.file_id] = editor.value;
 }
 
 // ── 수정 토글 ────────────────────────────────────────────────
@@ -576,24 +580,53 @@ async function toggleEdit() {
 
 async function startEdit() {
   const token = sessionStorage.getItem("access_token");
-  codeSnapshot = fileCodes[activeFile.file_id] || "";
-  activeFile.editingBy = currentUser.nickname;
-  isEditingNow = true;
+  if (!activeFile) return;
 
-  renderFileTree();
-  renderToolbar();
-  renderCode();
-  document.getElementById("code-editor")?.focus();
+  // Try to inform the server that we are starting to edit by sending one heartbeat.
+  try {
+    const res = await fetch(`/api/request_file_heartbeat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ project_id: projectInfo.id, file_uid: activeFile.file_id }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      alert(data.message || "편집을 시작할 수 없습니다. 다른 사용자가 편집 중일 수 있습니다.");
+      // update server editing info if provided
+      if (data.editing_users && data.editing_users.length > 0) {
+        activeFile.editingBy = data.editing_users[0];
+        renderFileTree();
+        renderToolbar();
+      }
+      return;
+    }
 
-  // 하트비트 10초 주기 시작
-  heartbeatTimer = setInterval(() => sendHeartbeat(token), 10000);
+    // server accepted heartbeat; enable local edit mode
+    codeSnapshot = document.getElementById("code-editor")?.value || "";
+    activeFile.editingBy = currentUser.nickname;
+    isEditingNow = true;
+
+    renderFileTree();
+    renderToolbar();
+    renderCode(document.getElementById("code-editor")?.value || codeSnapshot);
+    document.getElementById("code-editor")?.focus();
+
+    // start periodic heartbeat
+    heartbeatTimer = setInterval(() => sendHeartbeat(token), 10000);
+  } catch (e) {
+    console.error("startEdit 실패:", e);
+    alert("편집을 시작하는 중 오류가 발생했습니다.");
+  }
 }
 
 async function finishEdit(save) {
   const token = sessionStorage.getItem("access_token");
   if (!activeFile) return;
 
-  const newCode = fileCodes[activeFile.file_id] || "";
+  const newCode = document.getElementById("code-editor")?.value || codeSnapshot;
 
   // 하트비트 중단
   if (heartbeatTimer) {
@@ -616,7 +649,7 @@ async function finishEdit(save) {
 
   renderFileTree();
   renderToolbar();
-  renderCode();
+  renderCode(newCode);
 }
 
 // ── 파일 저장 API ─────────────────────────────────────────────
