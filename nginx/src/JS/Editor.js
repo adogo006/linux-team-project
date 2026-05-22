@@ -123,7 +123,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadProject(token, projectId);
   } catch (e) {
     console.error("프로젝트 로드 실패:", e);
-    window.location.href = "project.html";
+    // window.location.href = "project.html"; // 개발 중에는 즉시 리디렉트하지 않고 오류 내용을 알려줍니다.
+    try {
+      // 개발용: 즉시 리디렉트하면 원인 파악이 어렵기 때문에 오류 내용을 알려주고 리디렉트 동작을 멈춥니다.
+      alert("프로젝트 로드 실패: " + (e && e.message ? e.message : String(e)) + "\n콘솔에서 스택을 확인하세요.");
+    } catch (err) {
+      // ignore alert failures
+    }
+    // 개발 중에는 리디렉트하지 않고 콘솔에 스택을 남긴 뒤 중단합니다.
     return;
   }
 
@@ -153,6 +160,7 @@ window.addEventListener("beforeunload", stopTokenRefreshTimer);
 
 // ── 프로젝트 열기 ─────────────────────────────────────────────
 async function loadProject(token, projectId) {
+  console.debug("loadProject: projectId=", projectId, "tokenExists=", !!token);
   const res = await fetch(`/api/request_project_open`, {
     method: "POST",
     headers: {
@@ -162,7 +170,16 @@ async function loadProject(token, projectId) {
     body: JSON.stringify({ project_id: projectId }),
   });
   const data = await res.json();
-  if (!data.success) throw new Error("OPEN_FAILED");
+  if (!data.success) {
+    console.error("request_project_open failed:", res.status, data);
+    try {
+      // 개발용: 실패 응답 내용을 바로 보여줘서 원인 파악을 쉽게 합니다.
+      alert("request_project_open failed:\nstatus: " + res.status + "\nresponse: " + JSON.stringify(data));
+    } catch (err) {
+      /* ignore */
+    }
+    throw new Error("OPEN_FAILED");
+  }
 
   projectInfo.name = data.project.project_name;
   editLogs = data.logs || [];
@@ -180,21 +197,23 @@ async function loadProject(token, projectId) {
 }
 
 // ── 서버 파일트리 → 내부 트리 구조 변환 ──────────────────────
-// 서버: [{ uid, display_name, node_type, parent_uid, children }, ...]
+// 서버: [{ id, name, type, parent_id, children }, ...]
+// nodes 에 지금 file_tree 전체가 들어가 있다.
 function buildTreeFromServer(nodes) {
   if (!nodes || !Array.isArray(nodes)) return [];
   return nodes.map((n) => {
     const node = {
-      file_id: n.uid,
-      name: n.display_name,
-      type: n.node_type === "DIRECTORY" ? "folder" : "file",
+      file_id: n.id,
+      name: n.name,
+      type: n.type === "DIRECTORY" ? "folder" : "file",
+      path: n.path,
       editingBy: null,
       open: true,
     };
     if (node.type === "folder") {
       node.children = buildTreeFromServer(n.children || []);
     }
-    fileNodeMap[n.uid] = node;
+    fileNodeMap[n.id] = node;
     return node;
   });
 }
@@ -603,7 +622,7 @@ async function finishEdit(save) {
 // ── 파일 저장 API ─────────────────────────────────────────────
 async function saveFile(token, projectId, fileId, content) {
   try {
-    const res = await fetch(`/api /request_file_save`, {
+    const res = await fetch(`/api/request_file_save`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

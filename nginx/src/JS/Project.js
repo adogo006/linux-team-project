@@ -187,7 +187,7 @@ function renderProjects() {
   const cards = myProjects
     .map(
       (p, i) => `
-    <div class="project-card" style="animation-delay:${i * 0.06}s" onclick="openProject('${p.project_id}')">
+      <div class="project-card" data-project-id="${p.project_id}" style="animation-delay:${i * 0.06}s">
       <div class="project-info">
         <div class="project-name">${escHtml(p.project_name)}</div>
       </div>
@@ -210,6 +210,14 @@ function renderProjects() {
   `;
 
   grid.innerHTML = cards + addBtn;
+
+  // Attach click listeners to project cards using data attribute (avoid inline onclick scope issues)
+  grid.querySelectorAll('.project-card').forEach((card) => {
+    card.addEventListener('click', (e) => {
+      const id = card.dataset.projectId || card.getAttribute('data-project-id');
+      if (id) openProject(id);
+    });
+  });
 }
 
 // ── 초대 목록 렌더링 ──────────────────────────────────────────
@@ -315,7 +323,8 @@ async function createProject() {
 
 // ── 프로젝트 진입 ─────────────────────────────────────────────
 function openProject(id) {
-  window.location.href = `editor.html?id=${id}`;
+  const safeId = encodeURIComponent(id);
+  window.location.href = `editor.html?id=${safeId}`;
 }
 
 // ── 유틸 ──────────────────────────────────────────────────────
