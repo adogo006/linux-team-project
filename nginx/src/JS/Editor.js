@@ -1,6 +1,6 @@
 // ── editor.js ──
 
-const API_BASE = "http://YOUR_API_URL";
+const TOKEN_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
 
 // ── 상태 ──────────────────────────────────────────────────────
 let currentUser = { nickname: "", role: "member" };
@@ -16,6 +16,47 @@ let codeSnapshot = "";
 
 let heartbeatTimer = null; // 파일 편집 하트비트 인터벌
 let pollTimer = null; // 멤버 폴링 인터벌
+let tokenRefreshTimer = null;
+
+async function request_refresh(token) {
+  const res = await fetch(`${API_BASE}/api:8000/request_refresh`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "REFRESH_FAILED");
+  return data;
+}
+
+function startTokenRefreshTimer() {
+  stopTokenRefreshTimer();
+  tokenRefreshTimer = setInterval(async () => {
+    const token = sessionStorage.getItem("access_token");
+    if (!token) return;
+
+    try {
+      const data = await request_refresh(token);
+      sessionStorage.setItem("access_token", data.access_token);
+      sessionStorage.setItem("token_type", data.token_type);
+    } catch (e) {
+      console.error("토큰 갱신 실패:", e);
+      sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("token_type");
+      sessionStorage.removeItem("nickname");
+      window.location.href = "login.html";
+    }
+  }, TOKEN_REFRESH_INTERVAL_MS);
+}
+
+function stopTokenRefreshTimer() {
+  if (tokenRefreshTimer) {
+    clearInterval(tokenRefreshTimer);
+    tokenRefreshTimer = null;
+  }
+}
 
 // ── 초기화 ────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
@@ -37,6 +78,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const nickname = sessionStorage.getItem("nickname") || "";
   currentUser.nickname = nickname;
+
+  startTokenRefreshTimer();
 
   try {
     await loadProject(token, projectId);
@@ -67,6 +110,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 });
+
+window.addEventListener("beforeunload", stopTokenRefreshTimer);
 
 // ── 프로젝트 열기 ─────────────────────────────────────────────
 async function loadProject(token, projectId) {

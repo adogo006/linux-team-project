@@ -2,6 +2,21 @@
 
 // ── API 함수 ──────────────────────────────────────────────────
 
+const TOKEN_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
+
+async function request_refresh(token) {
+  const res = await fetch(`/api/request_refresh`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "REFRESH_FAILED");
+  return data;
+}
+
 // 프로젝트 목록 조회
 async function request_get_projects(token) {
   const res = await fetch(`/api/request_project_list`, {
@@ -62,6 +77,34 @@ async function request_respond_invite(token, project_id, action) {
 // ── 상태 ─────────────────────────────────────────────────────
 let myProjects = [];
 let invites = [];
+let tokenRefreshTimer = null;
+
+function startTokenRefreshTimer() {
+  stopTokenRefreshTimer();
+  tokenRefreshTimer = setInterval(async () => {
+    const token = sessionStorage.getItem("access_token");
+    if (!token) return;
+
+    try {
+      const data = await request_refresh(token);
+      sessionStorage.setItem("access_token", data.access_token);
+      sessionStorage.setItem("token_type", data.token_type);
+    } catch (e) {
+      console.error("토큰 갱신 실패:", e);
+      sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("token_type");
+      sessionStorage.removeItem("nickname");
+      window.location.href = "login.html";
+    }
+  }, TOKEN_REFRESH_INTERVAL_MS);
+}
+
+function stopTokenRefreshTimer() {
+  if (tokenRefreshTimer) {
+    clearInterval(tokenRefreshTimer);
+    tokenRefreshTimer = null;
+  }
+}
 
 // ── 초기화 ────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
@@ -77,9 +120,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("nav-username").textContent = nickname;
   document.getElementById("nav-avatar").textContent = getInitials(nickname);
 
+  startTokenRefreshTimer();
+
   await loadProjects(token);
   await loadInvites(token);
 });
+
+window.addEventListener("beforeunload", stopTokenRefreshTimer);
 
 // ── 데이터 로드 ───────────────────────────────────────────────
 async function loadProjects(token) {
