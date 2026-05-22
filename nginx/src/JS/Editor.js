@@ -249,6 +249,7 @@ async function loadMembers(token, projectId) {
 async function pollMembers(token, projectId) {
   try {
     await loadMembers(token, projectId);
+    await refreshLogs(token, projectId);
   } catch (e) {
     console.error("멤버 폴링 실패:", e);
   }
@@ -328,7 +329,16 @@ function renderUsers() {
   list.innerHTML = html;
 
   const bottom = document.getElementById("panel-bottom");
-  bottom.style.display = currentUser.role === "owner" ? "flex" : "none";
+  bottom.style.display = "flex";
+
+  const deleteButton = document.getElementById("btn-project-delete");
+  if (deleteButton) {
+    const isOwner = currentUser.role === "owner";
+    deleteButton.disabled = !isOwner;
+    deleteButton.title = isOwner
+      ? "프로젝트 삭제"
+      : "프로젝트장은 아닌 멤버는 삭제할 수 없습니다.";
+  }
 }
 
 // ── 파일 트리 ────────────────────────────────────────────────
@@ -727,7 +737,7 @@ async function releaseFile(token, projectId, fileId) {
 // ── 로그 갱신 ────────────────────────────────────────────────
 async function refreshLogs(token, projectId) {
   try {
-    const res = await fetch(`/api/request_project_open`, {
+    const res = await fetch(`/api/request_project_logs`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1383,7 +1393,7 @@ async function sendInvite() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ project_id: projectInfo.id, nickname }),
+      body: JSON.stringify({ project_id: projectInfo.id, target_nickname: nickname }),
     });
     const data = await res.json();
     if (!data.success) {

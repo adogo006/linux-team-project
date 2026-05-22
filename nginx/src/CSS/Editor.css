@@ -302,6 +302,17 @@ body {
   background: rgba(248, 113, 113, 0.08);
   border-color: var(--red);
 }
+.btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+  border-color: rgba(248, 113, 113, 0.16);
+  color: rgba(248, 113, 113, 0.7);
+}
+.btn-danger:disabled:hover {
+  background: transparent;
+  border-color: rgba(248, 113, 113, 0.16);
+}
 
 /* ══════════════════════════════
    가운데 패널 — 코드 에디터

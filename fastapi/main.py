@@ -835,7 +835,7 @@ def request_project_rename(payload: schemas.RequestProjectRename, authorization:
     finally:
         db.close()
 
-#프로젝트에 사용자 초대
+#프로젝트에 사용자 초대(인자: 프로젝트id, 초대할 사용자 닉네임)
 @app.post("/request_invite_send")
 def request_project_invite(payload: schemas.RequestProjectInvite, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
@@ -1246,11 +1246,9 @@ def request_respond_invite(payload: schemas.RequestInviteRespond, authorization:
             message = "초대를 수락했습니다."
             db.delete(invite)
             db.commit()
-            db.refresh(invite)
         else:
             db.delete(invite)
             db.commit()
-            db.refresh(invite)
             message = "초대를 거절했습니다."
 
         return {

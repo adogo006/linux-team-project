@@ -26,7 +26,6 @@ class RequestProjectCreate(BaseModel):
 
 class RequestProjectInvite(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
-    inviter_nickname: str = Field(..., description="초대자(생성자/권한자) 닉네임")
     target_nickname: str = Field(..., description="초대할 대상 닉네임")
 
 class RequestProjectRemoveMember(BaseModel):
