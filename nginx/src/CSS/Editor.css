@@ -95,6 +95,22 @@ body {
   content: "← ";
 }
 
+.nav-logout {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  transition: all 0.15s;
+  background: transparent;
+}
+.nav-logout:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
 /* ── 3단 레이아웃 ── */
 .editor-layout {
   display: grid;

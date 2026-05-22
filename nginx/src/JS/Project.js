@@ -17,6 +17,19 @@ async function request_refresh(token) {
   return data;
 }
 
+async function request_logout(token) {
+  const res = await fetch(`/api/request_logout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "LOGOUT_FAILED");
+  return data;
+}
+
 // 프로젝트 목록 조회
 async function request_get_projects(token) {
   const res = await fetch(`/api/request_project_list`, {
@@ -103,6 +116,24 @@ function stopTokenRefreshTimer() {
   if (tokenRefreshTimer) {
     clearInterval(tokenRefreshTimer);
     tokenRefreshTimer = null;
+  }
+}
+
+async function handleLogout() {
+  const token = sessionStorage.getItem("access_token");
+
+  try {
+    if (token) {
+      await request_logout(token);
+    }
+  } catch (e) {
+    console.error("로그아웃 요청 실패:", e);
+  } finally {
+    stopTokenRefreshTimer();
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("token_type");
+    sessionStorage.removeItem("nickname");
+    window.location.href = "login.html";
   }
 }
 

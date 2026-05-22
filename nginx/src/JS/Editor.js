@@ -1,5 +1,4 @@
 // ── editor.js ──
-
 const TOKEN_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
 
 // ── 상태 ──────────────────────────────────────────────────────
@@ -19,7 +18,7 @@ let pollTimer = null; // 멤버 폴링 인터벌
 let tokenRefreshTimer = null;
 
 async function request_refresh(token) {
-  const res = await fetch(`${API_BASE}/api:8000/request_refresh`, {
+  const res = await fetch(`/api/request_refresh`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -28,6 +27,19 @@ async function request_refresh(token) {
   });
   const data = await res.json();
   if (!res.ok || !data.success) throw new Error(data.message || "REFRESH_FAILED");
+  return data;
+}
+
+async function request_logout(token) {
+  const res = await fetch(`${API_BASE}/api:8000/request_logout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.message || "LOGOUT_FAILED");
   return data;
 }
 
@@ -55,6 +67,32 @@ function stopTokenRefreshTimer() {
   if (tokenRefreshTimer) {
     clearInterval(tokenRefreshTimer);
     tokenRefreshTimer = null;
+  }
+}
+
+async function handleLogout() {
+  const token = sessionStorage.getItem("access_token");
+
+  try {
+    if (token) {
+      await request_logout(token);
+    }
+  } catch (e) {
+    console.error("로그아웃 요청 실패:", e);
+  } finally {
+    stopTokenRefreshTimer();
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("token_type");
+    sessionStorage.removeItem("nickname");
+    window.location.href = "login.html";
   }
 }
 
@@ -115,7 +153,7 @@ window.addEventListener("beforeunload", stopTokenRefreshTimer);
 
 // ── 프로젝트 열기 ─────────────────────────────────────────────
 async function loadProject(token, projectId) {
-  const res = await fetch(`${API_BASE}/api:8000/request_project_open`, {
+  const res = await fetch(`/api/request_project_open`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -163,7 +201,7 @@ function buildTreeFromServer(nodes) {
 
 // ── 멤버 목록 로드 ────────────────────────────────────────────
 async function loadMembers(token, projectId) {
-  const res = await fetch(`${API_BASE}/api:8000/request_project_members`, {
+  const res = await fetch(`/api/request_project_members`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -353,7 +391,7 @@ async function openFile(fileId) {
   if (isEditingNow && activeFile) await finishEdit(false);
 
   try {
-    const res = await fetch(`${API_BASE}/api:8000/request_file_open`, {
+    const res = await fetch(`/api/request_file_open`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -562,7 +600,7 @@ async function finishEdit(save) {
 // ── 파일 저장 API ─────────────────────────────────────────────
 async function saveFile(token, projectId, fileId, content) {
   try {
-    const res = await fetch(`${API_BASE}/api:8000/request_file_save`, {
+    const res = await fetch(`/api /request_file_save`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -585,7 +623,7 @@ async function saveFile(token, projectId, fileId, content) {
 async function sendHeartbeat(token) {
   if (!activeFile || !isEditingNow) return;
   try {
-    await fetch(`${API_BASE}/api:8000/request_file_heartbeat`, {
+    await fetch(`/api/request_file_heartbeat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -604,7 +642,7 @@ async function sendHeartbeat(token) {
 // ── 편집 해제 API ─────────────────────────────────────────────
 async function releaseFile(token, projectId, fileId) {
   try {
-    await fetch(`${API_BASE}/api:8000/request_file_release`, {
+    await fetch(`/api/request_file_release`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -620,7 +658,7 @@ async function releaseFile(token, projectId, fileId) {
 // ── 로그 갱신 ────────────────────────────────────────────────
 async function refreshLogs(token, projectId) {
   try {
-    const res = await fetch(`${API_BASE}/api:8000/request_project_open`, {
+    const res = await fetch(`/api/request_project_open`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -702,7 +740,7 @@ async function addFile(parentId) {
   if (!name?.trim()) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api:8000/request_file_create`, {
+    const res = await fetch(`/api/request_file_create`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -746,7 +784,7 @@ async function addFolder(parentId) {
   if (!name?.trim()) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api:8000/request_directory_create`, {
+    const res = await fetch(`/api/request_directory_create`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -862,7 +900,7 @@ async function kickMember(nickname) {
 
   try {
     const res = await fetch(
-      `${API_BASE}/api:8000/request_project_remove_member`,
+      `/api/request_project_remove_member`,
       {
         method: "POST",
         headers: {
@@ -948,7 +986,7 @@ async function sendInvite() {
   if (!nickname) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api:8000/request_invite_send`, {
+    const res = await fetch(`/api/request_invite_send`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -996,7 +1034,7 @@ async function confirmDelete() {
   const token = sessionStorage.getItem("access_token");
 
   try {
-    const res = await fetch(`${API_BASE}/api:8000/request_project_delete`, {
+    const res = await fetch(`/api/request_project_delete`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
