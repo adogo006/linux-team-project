@@ -15,6 +15,7 @@ let codeSnapshot = "";
 let heartbeatTimer = null; // 파일 편집 하트비트 인터벌
 let pollTimer = null; // 멤버 폴링 인터벌
 let tokenRefreshTimer = null;
+let actionModalResolver = null;
 
 async function request_refresh(token) {
   const res = await fetch(`/api/request_refresh`, {
@@ -804,8 +805,18 @@ function handleLogOverlay(e) {
 // ── 파일 / 폴더 추가 ─────────────────────────────────────────
 async function addFile(parentId) {
   const token = sessionStorage.getItem("access_token");
-  const name = prompt("파일 이름을 입력하세요 (예: MyClass.java)");
-  if (!name?.trim()) return;
+  const result = await openActionModal({
+    title: "파일 추가",
+    description: "생성할 파일 이름을 입력하세요.",
+    mode: "input",
+    inputLabel: "파일 이름",
+    inputPlaceholder: "예: MyClass.java",
+    confirmText: "생성",
+  });
+  if (!result.confirmed) return;
+
+  const name = result.value;
+  if (!name) return;
 
   try {
     const res = await fetch(`/api/request_file_create`, {
@@ -822,7 +833,11 @@ async function addFile(parentId) {
     });
     const data = await res.json();
     if (!data.success) {
-      alert(data.message || "파일 생성 실패");
+      await openActionModal({
+        title: "파일 생성 실패",
+        description: data.message || "파일 생성 실패",
+        mode: "alert",
+      });
       return;
     }
 
@@ -843,6 +858,11 @@ async function addFile(parentId) {
     renderFileTree();
   } catch (e) {
     console.error("파일 생성 오류:", e);
+    await openActionModal({
+      title: "오류",
+      description: "서버와 연결할 수 없습니다.",
+      mode: "alert",
+    });
   }
 }
 
@@ -943,7 +963,18 @@ function openNodeCtx(e, nodeId, nodeType) {
 async function handleProjectRename() {
   const token = sessionStorage.getItem("access_token");
   const currentName = projectInfo.name || "";
-  const newName = prompt("프로젝트 이름을 입력하세요", currentName)?.trim();
+  const result = await openActionModal({
+    title: "프로젝트 이름 변경",
+    description: "새 프로젝트 이름을 입력하세요.",
+    mode: "input",
+    inputLabel: "프로젝트 이름",
+    inputPlaceholder: "프로젝트 이름",
+    inputValue: currentName,
+    confirmText: "변경",
+  });
+  if (!result.confirmed) return;
+
+  const newName = result.value;
   if (!newName || newName === currentName) return;
 
   try {
@@ -957,14 +988,22 @@ async function handleProjectRename() {
     });
     const data = await res.json();
     if (!data.success) {
-      alert(data.message || "프로젝트 이름 변경 실패");
+      await openActionModal({
+        title: "프로젝트 이름 변경 실패",
+        description: data.message || "프로젝트 이름 변경 실패",
+        mode: "alert",
+      });
       return;
     }
 
     projectInfo.name = newName;
     renderNav();
   } catch (e) {
-    alert("서버와 연결할 수 없습니다.");
+    await openActionModal({
+      title: "오류",
+      description: "서버와 연결할 수 없습니다.",
+      mode: "alert",
+    });
   }
 }
 
@@ -973,7 +1012,18 @@ async function renameNode(nodeId, nodeType) {
   const node = fileNodeMap[nodeId];
   if (!node) return;
 
-  const newName = prompt("이름을 입력하세요", node.name)?.trim();
+  const result = await openActionModal({
+    title: nodeType === "folder" ? "폴더 이름 변경" : "파일 이름 변경",
+    description: "새 이름을 입력하세요.",
+    mode: "input",
+    inputLabel: "이름",
+    inputPlaceholder: "새 이름",
+    inputValue: node.name,
+    confirmText: "변경",
+  });
+  if (!result.confirmed) return;
+
+  const newName = result.value;
   if (!newName || newName === node.name) return;
 
   try {
@@ -991,7 +1041,11 @@ async function renameNode(nodeId, nodeType) {
     });
     const data = await res.json();
     if (!data.success) {
-      alert(data.message || "이름 변경 실패");
+      await openActionModal({
+        title: "이름 변경 실패",
+        description: data.message || "이름 변경 실패",
+        mode: "alert",
+      });
       return;
     }
 
@@ -1003,7 +1057,11 @@ async function renameNode(nodeId, nodeType) {
     }
     renderFileTree();
   } catch (e) {
-    alert("서버와 연결할 수 없습니다.");
+    await openActionModal({
+      title: "오류",
+      description: "서버와 연결할 수 없습니다.",
+      mode: "alert",
+    });
   }
 }
 
@@ -1015,7 +1073,13 @@ async function deleteNode(nodeId, nodeType) {
   const confirmText = nodeType === "folder"
     ? `폴더 "${node.name}"와 하위 항목을 삭제하려면 확인을 누르세요.`
     : `파일 "${node.name}"을 삭제하려면 확인을 누르세요.`;
-  if (!confirm(confirmText)) return;
+  const result = await openActionModal({
+    title: nodeType === "folder" ? "폴더 삭제" : "파일 삭제",
+    description: confirmText,
+    mode: "confirm",
+    confirmText: "삭제",
+  });
+  if (!result.confirmed) return;
 
   const endpoint = nodeType === "folder"
     ? "/api/request_directory_delete"
@@ -1035,7 +1099,11 @@ async function deleteNode(nodeId, nodeType) {
     });
     const data = await res.json();
     if (!data.success) {
-      alert(data.message || "삭제 실패");
+      await openActionModal({
+        title: "삭제 실패",
+        description: data.message || "삭제 실패",
+        mode: "alert",
+      });
       return;
     }
 
@@ -1046,7 +1114,11 @@ async function deleteNode(nodeId, nodeType) {
     }
     renderFileTree();
   } catch (e) {
-    alert("서버와 연결할 수 없습니다.");
+    await openActionModal({
+      title: "오류",
+      description: "서버와 연결할 수 없습니다.",
+      mode: "alert",
+    });
   }
 }
 
@@ -1179,6 +1251,85 @@ function openInviteModal() {
 
 function closeInviteModal() {
   document.getElementById("invite-overlay").classList.remove("open");
+}
+
+function openActionModal(options = {}) {
+  const {
+    title = "알림",
+    description = "",
+    mode = "alert", // alert | confirm | input
+    inputLabel = "입력",
+    inputPlaceholder = "",
+    inputValue = "",
+    confirmText = "확인",
+    hint = "",
+  } = options;
+
+  const overlay = document.getElementById("action-overlay");
+  const titleEl = document.getElementById("action-title");
+  const subEl = document.getElementById("action-sub");
+  const inputLabelEl = document.getElementById("action-input-label");
+  const inputEl = document.getElementById("action-input");
+  const hintEl = document.getElementById("action-hint");
+  const cancelBtn = document.getElementById("btn-action-cancel");
+  const confirmBtn = document.getElementById("btn-action-confirm");
+
+  titleEl.textContent = title;
+  subEl.textContent = description;
+  inputLabelEl.textContent = inputLabel;
+  inputEl.placeholder = inputPlaceholder;
+  inputEl.value = inputValue;
+  hintEl.textContent = hint;
+  confirmBtn.textContent = confirmText;
+
+  const showInput = mode === "input";
+  const showCancel = mode !== "alert";
+  inputLabelEl.style.display = showInput ? "block" : "none";
+  inputEl.style.display = showInput ? "block" : "none";
+  hintEl.style.display = showInput && hint ? "block" : "none";
+  cancelBtn.style.display = showCancel ? "inline-flex" : "none";
+
+  overlay.classList.add("open");
+
+  if (showInput) {
+    setTimeout(() => {
+      inputEl.focus();
+      inputEl.select();
+    }, 0);
+  } else {
+    setTimeout(() => confirmBtn.focus(), 0);
+  }
+
+  return new Promise((resolve) => {
+    actionModalResolver = resolve;
+  });
+}
+
+function closeActionModal(confirmed) {
+  document.getElementById("action-overlay").classList.remove("open");
+  const inputEl = document.getElementById("action-input");
+
+  if (actionModalResolver) {
+    actionModalResolver({ confirmed, value: inputEl.value.trim() });
+    actionModalResolver = null;
+  }
+}
+
+function confirmActionModal() {
+  closeActionModal(true);
+}
+
+function handleActionOverlay(e) {
+  if (e.target === document.getElementById("action-overlay")) {
+    closeActionModal(false);
+  }
+}
+
+function handleActionInputKeydown(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    confirmActionModal();
+  }
 }
 
 function handleInviteOverlay(e) {
@@ -1323,5 +1474,6 @@ document.addEventListener("keydown", (e) => {
     closeDeleteModal();
     closeLogPanel();
     closeInviteModal();
+    closeActionModal(false);
   }
 });

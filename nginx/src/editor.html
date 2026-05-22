@@ -29,18 +29,6 @@
       <aside class="panel-files">
         <div class="files-header">
           <span>파일</span>
-          <div class="files-actions">
-            <button class="icon-btn" onclick="addFile(null)" title="파일 추가">
-              +
-            </button>
-            <button
-              class="icon-btn"
-              onclick="addFolder(null)"
-              title="폴더 추가"
-            >
-              📁
-            </button>
-          </div>
         </div>
         <div class="file-tree" id="file-tree"></div>
       </aside>
@@ -122,6 +110,38 @@
             disabled
           >
             초대 보내기
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 공통 작업 모달 (이름 변경/삭제 확인/알림) -->
+    <div
+      class="invite-modal-overlay"
+      id="action-overlay"
+      onclick="handleActionOverlay(event)"
+    >
+      <div class="invite-modal action-modal">
+        <div class="invite-modal-corner"></div>
+        <div class="invite-modal-title" id="action-title">작업</div>
+        <div class="invite-modal-sub" id="action-sub"></div>
+
+        <label class="invite-input-label" id="action-input-label">입력</label>
+        <input
+          class="invite-input"
+          id="action-input"
+          type="text"
+          autocomplete="off"
+          onkeydown="handleActionInputKeydown(event)"
+        />
+        <div class="invite-hint info" id="action-hint"></div>
+
+        <div class="invite-modal-actions">
+          <button class="btn-cancel-modal" id="btn-action-cancel" onclick="closeActionModal(false)">
+            취소
+          </button>
+          <button class="btn-invite-send" id="btn-action-confirm" onclick="confirmActionModal()">
+            확인
           </button>
         </div>
       </div>

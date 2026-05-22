@@ -479,7 +479,7 @@ body {
   font-size: 14px;
   line-height: 1.7;
   color: var(--text);
-  padding: 20px 20px 20px 60px;
+  padding: 20px 20px 20px 48px;
   tab-size: 2;
   caret-color: var(--green);
 }
@@ -494,16 +494,18 @@ body {
   top: 0;
   left: 0;
   bottom: 0;
-  width: 48px;
+  width: 36px;
   padding-top: 20px;
   text-align: right;
-  padding-right: 10px;
+  padding-right: 6px;
   font-family: var(--font-mono);
   font-size: 14px;
   line-height: 1.7;
+  white-space: pre;
   color: var(--text-dim);
   user-select: none;
   pointer-events: none;
+  overflow: hidden;
   border-right: 1px solid var(--border);
   background: rgba(22, 25, 32, 0.6);
 }
@@ -632,9 +634,9 @@ body {
   color: var(--blue);
 }
 
-/* 폴더 행 hover 시 나타나는 + 버튼 */
+/* 폴더 행 + 버튼은 항상 노출 */
 .tree-add-btn {
-  opacity: 0;
+  opacity: 1;
   margin-left: auto;
   font-size: 14px;
   color: var(--text-muted);
@@ -645,9 +647,6 @@ body {
     opacity 0.1s,
     background 0.1s,
     color 0.1s;
-}
-.tree-item.folder:hover .tree-add-btn {
-  opacity: 1;
 }
 .tree-add-btn:hover {
   background: var(--surface2);
