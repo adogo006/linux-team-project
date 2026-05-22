@@ -47,7 +47,7 @@ async function request_get_invites(token) {
 
 // 초대 수락 / 거절
 async function request_respond_invite(token, project_id, action) {
-  const res = await fetch(`/api/request_invite_respond`, {
+  const res = await fetch(`/api/request_respond_invite`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -68,7 +68,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const token = sessionStorage.getItem("access_token");
 
   if (!token) {
-    window.location.href = "Login.html";
+    window.location.href = "login.html";
     return;
   }
 
@@ -116,7 +116,7 @@ function renderProjects() {
       <div class="project-meta">
         <div class="project-owner">
           <span class="owner-dot"></span>
-          ${escHtml(p.role === "Root" ? "방장" : "멤버")}
+          ${escHtml(p.owner_nickname)}
         </div>
       </div>
     </div>
@@ -220,9 +220,9 @@ async function createProject() {
 
     // 새 프로젝트를 목록에 바로 추가
     myProjects.push({
-      project_id: result.project_id,
-      project_name: name,
-      role: "Root",
+      project_id: result.project.project_id,
+      project_name: result.project.project_name,
+      owner_nickname: result.project.owner_nickname,
     });
 
     status.textContent = "✓ 프로젝트가 생성되었습니다!";

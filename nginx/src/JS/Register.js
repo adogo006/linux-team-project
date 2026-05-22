@@ -243,5 +243,5 @@ async function handleRegister() {
 }
 
 function goLogin() {
-  window.location.href = "Login.html";
+  window.location.href = "login.html";
 }

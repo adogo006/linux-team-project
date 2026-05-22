@@ -57,7 +57,7 @@ async function handleLogin() {
 }
 
 function goRegister() {
-  window.location.href = "Register.html";
+  window.location.href = "register.html";
 }
 
 document.addEventListener("keydown", (e) => {

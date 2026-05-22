@@ -21,7 +21,7 @@ let pollTimer = null; // 멤버 폴링 인터벌
 document.addEventListener("DOMContentLoaded", async () => {
   const token = sessionStorage.getItem("access_token");
   if (!token) {
-    window.location.href = "Login.html";
+    window.location.href = "login.html";
     return;
   }
 

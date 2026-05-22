@@ -740,7 +740,7 @@ def request_project_rename(payload: schemas.RequestProjectRename, authorization:
         db.close()
 
 #프로젝트에 사용자 초대
-@app.post("/request_project_invite")
+@app.post("/request_invite_send")
 def request_project_invite(payload: schemas.RequestProjectInvite, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
@@ -1105,8 +1105,8 @@ def request_invite_list(authorization: str | None = Header(None)):
     finally:
         db.close()
 
-@app.post("/request_invite_respond")
-def request_invite_respond(payload: schemas.RequestInviteRespond, authorization: str | None = Header(None)):
+@app.post("/request_respond_invite")
+def request_respond_invite(payload: schemas.RequestInviteRespond, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
     token_user_id = token_payload.get("id")
