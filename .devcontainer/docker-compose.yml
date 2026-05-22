@@ -21,9 +21,15 @@ services:
       - .env
     volumes:
       - ..:/workspaces:cached
+      - ../user_uploads:/user_uploads
     working_dir: /workspaces/fastapi
     environment:
       - PYTHONPATH=/workspaces         # 중요! /workspaces를 탐색 경로에 추가
+      - DB_INIT_RETRIES=30
+      - DB_INIT_DELAY=2
+    command: >
+      sh -c "python -m db_manager.create_tables &&
+      uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
     networks:
       - linux-project-net                # 내부사용자가 사용하는 net
     depends_on:
@@ -36,10 +42,12 @@ services:
     env_file: 
       - .env
     volumes:
+      - ../nginx/src:/usr/share/nginx/html:ro  # nginx가 정적 파일을 읽을 수 있도록 src 폴더를 공유
       - ..:/workspaces:cached       # 전체 프로젝트 루트 공유
-    working_dir: /workspaces/nginx   # 컨테이너 시작 시 크롤러 폴더에서 시작
     environment:
       - PYTHONPATH=/workspaces         # 중요! /workspaces를 탐색 경로에 추가
+    ports:
+      - "80:80"
     networks:
       - linux-project-net
     depends_on:

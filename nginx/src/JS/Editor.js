@@ -31,7 +31,7 @@ async function request_refresh(token) {
 }
 
 async function request_logout(token) {
-  const res = await fetch(`${API_BASE}/api:8000/request_logout`, {
+  const res = await fetch(`/api/request_logout`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

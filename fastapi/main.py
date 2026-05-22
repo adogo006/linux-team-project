@@ -108,13 +108,13 @@ def request_register(payload: schemas.RequestRegister):
     db = SessionLocal()
 
     try:
-        existing_nickname = crud.get_user_by_nickname(db, payload.nickname)
+        existing_nickname = crud.get_user_by_nickname(db, payload.nick_name)
         if existing_nickname:
             return {"success": False,
                     "message": "이미 사용 중인 닉네임입니다.",
                     "user": {
-                    "user_id": new_user.id,
-                    "nickname": new_user.nickname,
+                    "user_id": existing_nickname.id,
+                    "nickname": existing_nickname.nickname,
             },}
 
         existing_user = crud.get_user_by_user_id(db, payload.id)
@@ -122,8 +122,8 @@ def request_register(payload: schemas.RequestRegister):
             return {"success": False,
                     "message": "이미 사용 중인 아이디입니다.",
                     "user": {
-                    "user_id": new_user.id,
-                    "nickname": new_user.nickname,
+                    "user_id": existing_user.id,
+                    "nickname": existing_user.nickname,
             },}
         
         new_user = crud.create_user(
@@ -327,7 +327,7 @@ def request_project_open(payload: schemas.RequestProjectOpen, authorization: str
                 "user_nickname": log.user.nickname if log.user else "알 수 없음",
                 "action_type": log.action_type,
                 "message": log.message,
-                "timestamp": log.created_at.isoformat(),
+                "timestamp": log.end_time.isoformat(),
                 "target_node_name": raw_node.display_name if raw_node else None,
             })
 
@@ -342,6 +342,57 @@ def request_project_open(payload: schemas.RequestProjectOpen, authorization: str
             "file_tree": file_tree,
             "logs": logs,
             "editing_users": [],
+        }
+
+    finally:
+        db.close()
+
+#로그 조회
+@app.post("/request_project_logs")
+def request_project_logs(payload: schemas.RequestProjectOpen, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        project = crud.get_project_by_id(db, payload.project_id)
+
+        if not project:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+
+        raw_logs = crud.get_project_logs(db, payload.project_id)
+        logs = []
+
+        for log in raw_logs:
+            raw_node = crud.get_file_node(db, log.target_node_uid) if log.target_node_uid else None
+            logs.append({
+                "log_id": str(log.uid),
+                "user_nickname": log.user.nickname if log.user else "알 수 없음",
+                "action_type": log.action_type,
+                "message": log.message,
+                "timestamp": log.end_time.isoformat(),
+                "target_node_name": raw_node.display_name if raw_node else None,
+            })
+
+        return {
+            "success": True,
+            "message": "로그 조회 성공",
+            "logs": logs,
         }
 
     finally:

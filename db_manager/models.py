@@ -89,7 +89,13 @@ class FileNode(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     project = relationship("Project", back_populates="nodes")
-    children = relationship("FileNode", backref="parent", remote_side=[uid], cascade="all, delete-orphan")
+    parent = relationship("FileNode", remote_side=[uid], back_populates="children")
+    children = relationship(
+        "FileNode",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
 
 # ==========================================
 # 5. 수정 히스토리/로그 (project_logs)

@@ -60,6 +60,13 @@ function goRegister() {
   window.location.href = "register.html";
 }
 
+document.addEventListener("DOMContentLoaded", () => {
+  const token = sessionStorage.getItem("access_token");
+  if (token) {
+    window.location.href = "project.html";
+  }
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "Enter") handleLogin();
 });

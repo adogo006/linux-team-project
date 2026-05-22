@@ -21,24 +21,14 @@ def get_user_by_nickname(db: Session, nickname: str):
     """닉네임 중복 체크 시 조회"""
     return db.query(models.User).filter(models.User.nickname == nickname).first()
 
-def create_user(
-    db: Session,
-    username: str | None = None,
-    password_hash: str | None = None,
-    nickname: str | None = None,
-    user_id: str | None = None,
-    password: str | None = None,
-):
+def create_user(db: Session, user_id: str, password: str, nickname: str):
     """회원가입 기능 (새 계정 생성)"""
-    username = username or user_id
-    password_hash = password_hash or password
-
-    if not username or not password_hash or not nickname:
+    if not user_id or not password or not nickname:
         return None
 
     db_user = models.User(
-        id=username, 
-        password=password_hash, 
+        id=user_id, 
+        password=password, 
         nickname=nickname
     )
     db.add(db_user)

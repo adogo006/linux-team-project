@@ -1,0 +1,9 @@
+# Ignore local virtual environments and editor/git metadata from build context
+.venv/
+**/.venv/
+
+# Optional but recommended to reduce build context size
+.git/
+.vscode/
+__pycache__/
+*.pyc

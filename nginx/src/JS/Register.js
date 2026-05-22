@@ -35,7 +35,7 @@ async function request_register(nickname, username, password) {
     body: JSON.stringify({
       nick_name: nickname, // 백엔드 필드명: nick_name
       id: username, // 백엔드 필드명: id
-      password,
+      password: password, // 백엔드 필드명: password
     }),
   });
   const data = await res.json();
