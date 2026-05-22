@@ -236,7 +236,10 @@ async function pollMembers(token, projectId) {
 
 // ── 네비게이션 ───────────────────────────────────────────────
 function renderNav() {
-  document.getElementById("nav-project-name").textContent = projectInfo.name;
+  const projectNameButton = document.getElementById("nav-project-name");
+  projectNameButton.textContent = projectInfo.name;
+  projectNameButton.title = "프로젝트 이름 변경";
+  projectNameButton.onclick = handleProjectRename;
 
   const badge = document.getElementById("nav-role-badge");
   if (currentUser.role === "owner") {
@@ -325,7 +328,7 @@ function buildTreeHTML(nodes, depth, parentPath) {
     if (node.type === "folder") {
       const arrow = node.open ? "▾" : "▸";
       html += `
-        <div class="tree-item folder ${indent}" onclick="toggleFolder('${nodePath}')">
+        <div class="tree-item folder ${indent}" onclick="toggleFolder('${nodePath}')" oncontextmenu="openNodeCtx(event, '${node.file_id}', 'folder')">
           <span class="tree-icon">${arrow}</span>
           <span class="tree-name">${escHtml(node.name)}</span>
           <span class="tree-add-btn"
@@ -342,7 +345,7 @@ function buildTreeHTML(nodes, depth, parentPath) {
         : "";
       html += `
         <div class="tree-item file ${indent} ${activeFile?.file_id === node.file_id ? "active" : ""}"
-             onclick="openFile('${node.file_id}')">
+             onclick="openFile('${node.file_id}')" oncontextmenu="openNodeCtx(event, '${node.file_id}', 'file')">
           <span class="tree-icon">${icon}</span>
           <span class="tree-name">${escHtml(node.name)}</span>
           ${editTag}
@@ -841,6 +844,179 @@ function openTreeCtx(e, folderId) {
     () => document.addEventListener("click", closeCtxMenu, { once: true }),
     0,
   );
+}
+
+function openNodeCtx(e, nodeId, nodeType) {
+  e.preventDefault();
+  e.stopPropagation();
+  closeCtxMenu();
+
+  const node = fileNodeMap[nodeId];
+  if (!node) return;
+
+  const deleteHandler =
+    nodeType === "file"
+      ? `deleteNode('${nodeId}', 'file')`
+      : `deleteNode('${nodeId}', 'folder')`;
+  const menu = document.createElement("div");
+  menu.className = "ctx-menu";
+  menu.id = "ctx-menu";
+  menu.innerHTML = `
+    <div class="ctx-item" onclick="renameNode('${nodeId}', '${nodeType}'); closeCtxMenu()">✏ 이름 변경</div>
+    <div class="ctx-item danger" onclick="${deleteHandler}; closeCtxMenu()">🗑 삭제</div>`;
+
+  const { x, y } = calcMenuPos(e, 180, 80);
+  menu.style.top = y + "px";
+  menu.style.left = x + "px";
+  document.body.appendChild(menu);
+  setTimeout(
+    () => document.addEventListener("click", closeCtxMenu, { once: true }),
+    0,
+  );
+}
+
+async function handleProjectRename() {
+  const token = sessionStorage.getItem("access_token");
+  const currentName = projectInfo.name || "";
+  const newName = prompt("프로젝트 이름을 입력하세요", currentName)?.trim();
+  if (!newName || newName === currentName) return;
+
+  try {
+    const res = await fetch(`/api/request_project_rename`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ project_id: projectInfo.id, new_name: newName }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.message || "프로젝트 이름 변경 실패");
+      return;
+    }
+
+    projectInfo.name = newName;
+    renderNav();
+  } catch (e) {
+    alert("서버와 연결할 수 없습니다.");
+  }
+}
+
+async function renameNode(nodeId, nodeType) {
+  const token = sessionStorage.getItem("access_token");
+  const node = fileNodeMap[nodeId];
+  if (!node) return;
+
+  const newName = prompt("이름을 입력하세요", node.name)?.trim();
+  if (!newName || newName === node.name) return;
+
+  try {
+    const res = await fetch(`/api/request_node_rename`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        project_id: projectInfo.id,
+        node_id: nodeId,
+        new_name: newName,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.message || "이름 변경 실패");
+      return;
+    }
+
+    node.name = newName;
+    if (activeFile?.file_id === nodeId) {
+      activeFile.name = newName;
+      renderTabs();
+      renderToolbar();
+    }
+    renderFileTree();
+  } catch (e) {
+    alert("서버와 연결할 수 없습니다.");
+  }
+}
+
+async function deleteNode(nodeId, nodeType) {
+  const token = sessionStorage.getItem("access_token");
+  const node = fileNodeMap[nodeId];
+  if (!node) return;
+
+  const confirmText = nodeType === "folder"
+    ? `폴더 "${node.name}"와 하위 항목을 삭제하려면 확인을 누르세요.`
+    : `파일 "${node.name}"을 삭제하려면 확인을 누르세요.`;
+  if (!confirm(confirmText)) return;
+
+  const endpoint = nodeType === "folder"
+    ? "/api/request_directory_delete"
+    : "/api/request_file_delete";
+  const payload = nodeType === "folder"
+    ? { project_id: projectInfo.id, node_uid: nodeId }
+    : { project_id: projectInfo.id, file_uid: nodeId };
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.message || "삭제 실패");
+      return;
+    }
+
+    const removedIds = removeNodeFromTree(nodeId);
+    if (activeFile && removedIds.has(activeFile.file_id)) {
+      activeFile = null;
+      showEmpty();
+    }
+    renderFileTree();
+  } catch (e) {
+    alert("서버와 연결할 수 없습니다.");
+  }
+}
+
+function removeNodeFromTree(nodeId) {
+  const removedIds = new Set();
+
+  function pruneNode(node) {
+    removedIds.add(node.file_id);
+    delete fileNodeMap[node.file_id];
+
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        pruneNode(child);
+      }
+    }
+  }
+
+  function walk(nodes) {
+    const next = [];
+    for (const node of nodes) {
+      if (node.file_id === nodeId) continue;
+      if (node.children) {
+        node.children = walk(node.children);
+      }
+      next.push(node);
+    }
+    return next;
+  }
+
+  const removedNode = fileNodeMap[nodeId];
+  if (removedNode) {
+    pruneNode(removedNode);
+  }
+  fileTree = walk(fileTree);
+  return removedIds;
 }
 
 function openUserMenu(e, nickname) {
