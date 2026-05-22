@@ -537,14 +537,15 @@ def request_file_open(payload: schemas.RequestFileOpen, authorization: str | Non
         if not file_node or file_node.node_type != crud.models.NodeType.FILE:
             raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
 
-        if has_other_active_editor(file_node.uid, user.nickname):
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "message": "다른 사용자가 수정 중입니다.",
-                    "editing_users": get_active_editors(file_node.uid),
-                },
-            )
+        # 파일을 열 때가 아닌 수정을 시작할 때 검사하는것으로 변경
+        # if has_other_active_editor(file_node.uid, user.nickname):
+        #     raise HTTPException(
+        #         status_code=409,
+        #         detail={
+        #             "message": "다른 사용자가 수정 중입니다.",
+        #             "editing_users": get_active_editors(file_node.uid),
+        #         },
+        #     )
 
         # touch_editing_user(file_node.uid, user.nickname) # 하트비트 등록/갱신을 수정중인 상태에서만 해당하도록 변경 예정
 
@@ -567,6 +568,50 @@ def request_file_open(payload: schemas.RequestFileOpen, authorization: str | Non
     finally:
         db.close()
 
+#파일 수정 하트비트 갱신, 수정하고 있는 사용자가 있는지 확인
+@app.post("/request_file_modify")
+def request_file_modify(payload: schemas.RequestFileAction, authorization: str | None = Header(None)):
+    token_str = token_module.get_token_from_header(authorization)
+    token_payload = token_module.verify_access_token(token_str)
+    token_user_id = token_payload.get("id")
+
+    db = SessionLocal()
+
+    try:
+        user = crud.get_user_by_user_id(db, token_user_id)
+
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+        is_member = crud.check_project_member(
+            db=db,
+            project_id=payload.project_id,
+            user_id=user.id,
+        )
+        if not is_member:
+            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
+
+        file_node = crud.get_file_node(db, payload.file_uid)
+
+        if not file_node or file_node.node_type != crud.models.NodeType.FILE:
+            raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+        
+        if has_other_active_editor(file_node.uid, user.nickname):
+            return {
+                "success": False,
+                "message": "다른 사용자가 수정 중입니다.",
+                "editing_users": get_active_editors(file_node.uid),
+            }
+        
+        touch_editing_user(file_node.uid, user.nickname)
+        return {
+            "success": True,
+            "message": "수정 상태 갱신 성공",
+            "editing_users": get_active_editors(file_node.uid),
+        }
+
+    finally:
+        db.close()
 
 #파일 편집 하트비트 갱신(프론트에서 10초마다 갱신 필요)
 @app.post("/request_file_heartbeat")
@@ -924,23 +969,35 @@ def request_project_members(payload: schemas.RequestProjectMembers, authorizatio
 
         members = crud.get_project_members(db, payload.project_id)
 
-        # 편집 중인 사용자 정보 정리 (조회 시에만)
+        # 시간이 지난 편집 중인 사용자 정보 정리 (조회 시에만)
         cleanup_editing_users()
+        members_dict_in_list = []
+        project = crud.get_project_by_id(db, payload.project_id)
+        for member in members:
+            is_editing = False
+            editing_file = None
+            # editing_users is a dict: { file_uid: { nickname: last_seen, ... }, ... }
+            for file_uid, info in editing_users.items():
+                if member.user.nickname in info:
+                    file_node = crud.get_file_node(db, file_uid)
+                    # DB의 UUID 타입과 요청 문자열 타입이 다를 수 있어 문자열로 맞춰 비교
+                    if file_node and str(file_node.project_uid) == str(payload.project_id):
+                        is_editing = True
+                        editing_file = file_node.display_name
+                        break
+
+            members_dict_in_list.append({
+                "user_id": member.user.id,
+                "nickname": member.user.nickname,
+                "is_creator": member.user.id == project.creator_id if project else False,
+                "is_editing": is_editing,
+                "editing_file": editing_file,
+            })
 
         return {
             "success": True,
             "message": "프로젝트 멤버 목록 조회 성공",
-            "members": [
-                {
-                    "user_id": member.user.id,
-                    "nickname": member.user.nickname,
-                    "is_creator": member.user.id == crud.get_project_by_id(db, payload.project_id).creator_id,
-                    "is_editing": any(
-                        member.user.nickname in editors for editors in editing_users.values()
-                    ),
-                }
-                for member in members
-            ],
+            "members": members_dict_in_list,
         }
 
     finally:

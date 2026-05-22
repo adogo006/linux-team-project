@@ -234,6 +234,7 @@ async function loadMembers(token, projectId) {
     nickname: m.nickname,
     role: m.is_creator ? "owner" : "member",
     isEditing: m.is_editing,
+    editingFile: m.editing_file, // 편집 중인 파일 ID (또는 null)
   }));
 
   // 내 role 업데이트
@@ -292,7 +293,9 @@ function renderUsers() {
               ${isMe ? '<span style="color:var(--text-dim);font-size:10px"> (나)</span>' : ""}
               <span class="owner-crown" title="프로젝트장">👑</span>
             </div>
-            ${owner.isEditing ? '<div class="user-status editing">수정 중</div>' : ""}
+            ${owner.isEditing
+              ? `<div class="user-status editing">${escHtml(owner.editingFile)} 수정 중</div>`
+              : `<div class="user-status">오프라인</div>`}
           </div>
         </div>
       </div>`;
@@ -311,7 +314,9 @@ function renderUsers() {
               ${escHtml(m.nickname)}
               ${isMe ? '<span style="color:var(--text-dim);font-size:10px"> (나)</span>' : ""}
             </div>
-            ${m.isEditing ? '<div class="user-status editing">수정 중</div>' : ""}
+            ${m.isEditing
+              ? `<div class="user-status editing">${escHtml(m.editingFile)} 수정 중</div>`
+              : `<div class="user-status">오프라인</div>`}
           </div>
           ${canKick ? `<button class="user-menu-btn" onclick="openUserMenu(event,'${escHtml(m.nickname)}')">⋯</button>` : ""}
         </div>`;
@@ -582,9 +587,9 @@ async function startEdit() {
   const token = sessionStorage.getItem("access_token");
   if (!activeFile) return;
 
-  // Try to inform the server that we are starting to edit by sending one heartbeat.
+  // 수정 버튼 클릭 시 먼저 편집 가능 여부를 확인합니다.
   try {
-    const res = await fetch(`/api/request_file_heartbeat`, {
+    const res = await fetch(`/api/request_file_modify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -594,17 +599,25 @@ async function startEdit() {
     });
     const data = await res.json();
     if (!res.ok || !data.success) {
-      alert(data.message || "편집을 시작할 수 없습니다. 다른 사용자가 편집 중일 수 있습니다.");
+      // 다른 사용자가 편집 중이면 닉네임을 포함해 안내합니다.
+      const editingUsers = (data.editing_users || []).filter((n) => n !== currentUser.nickname);
+      if (editingUsers.length > 0) {
+        alert(`${editingUsers[0]}이 수정 중 입니다.`);
+      } else {
+        alert(data.message || "편집을 시작할 수 없습니다. 다른 사용자가 편집 중일 수 있습니다.");
+      }
+
       // update server editing info if provided
       if (data.editing_users && data.editing_users.length > 0) {
-        activeFile.editingBy = data.editing_users[0];
+        const otherEditor = data.editing_users.find((n) => n !== currentUser.nickname);
+        activeFile.editingBy = otherEditor || data.editing_users[0];
         renderFileTree();
         renderToolbar();
       }
       return;
     }
 
-    // server accepted heartbeat; enable local edit mode
+    // 서버에서 수정 가능 상태를 확인했으므로 로컬 편집 모드를 활성화합니다.
     codeSnapshot = document.getElementById("code-editor")?.value || "";
     activeFile.editingBy = currentUser.nickname;
     isEditingNow = true;
@@ -614,7 +627,7 @@ async function startEdit() {
     renderCode(document.getElementById("code-editor")?.value || codeSnapshot);
     document.getElementById("code-editor")?.focus();
 
-    // start periodic heartbeat
+    // 편집이 시작된 뒤에는 주기 하트비트로 상태를 유지합니다.
     heartbeatTimer = setInterval(() => sendHeartbeat(token), 10000);
   } catch (e) {
     console.error("startEdit 실패:", e);
@@ -1146,9 +1159,8 @@ async function kickMember(nickname) {
       alert(data.message || "추방 실패");
       return;
     }
-
-    members = members.filter((m) => m.nickname !== nickname);
-    renderUsers();
+    // 서버에서 추방이 성공하면 서버 상태를 기준으로 멤버 목록을 다시 조회합니다.
+    await loadMembers(token, projectInfo.id);
   } catch (e) {
     console.error("추방 실패:", e);
   }
