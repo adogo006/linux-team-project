@@ -205,7 +205,7 @@ function buildTreeFromServer(nodes) {
     const node = {
       file_id: n.id,
       name: n.name,
-      type: n.type === "DIRECTORY" ? "folder" : "file",
+      type: n.type === "directory" ? "folder" : "file",
       path: n.path,
       editingBy: null,
       open: true,

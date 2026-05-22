@@ -212,7 +212,7 @@ def get_project_file_tree(db: Session, project_id: str):
         node_dict = {
             "id": str(node.uid),
             "name": node.display_name,
-            "type": node.node_type.value if hasattr(node.node_type, "value") else str(node.node_type),
+            "type": node.node_type.value, #프론트에 file or directory로 전달 
             "path": node.file_path,
             "children": [],
         }
