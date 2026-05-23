@@ -294,9 +294,9 @@ def rename_project(db: Session, project, new_name: str):
     db.refresh(project)
     return project
 
-def delete_node(db: Session, node_id: str):
+def delete_node(db: Session, node: models.FileNode):
     """파일 또는 디렉토리 삭제 (CASCADE로 인해 하위 폴더/파일도 자동 삭제됨)"""
-    db_node = db.query(models.FileNode).filter(models.FileNode.uid == node_id).first()
+    db_node = db.query(models.FileNode).filter(models.FileNode.uid == node.uid).first()
     if db_node:
         db.delete(db_node)
         db.commit()

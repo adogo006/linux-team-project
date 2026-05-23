@@ -1058,66 +1058,9 @@ def request_project_delete(payload: schemas.RequestProjectOpen, authorization: s
     finally:
         db.close()
 
-#파일 삭제
-@app.post("/request_file_delete")
+#노드 삭제(project_id, node_uid)
+@app.post("/request_node_delete")
 def request_file_delete(payload: schemas.RequestFileDelete, authorization: str | None = Header(None)):
-    token_str = token_module.get_token_from_header(authorization)
-    token_payload = token_module.verify_access_token(token_str)
-    token_user_id = token_payload.get("id")
-
-    db = SessionLocal()
-
-    try:
-        user = crud.get_user_by_user_id(db, token_user_id)
-
-        if not user:
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
-
-        is_member = crud.check_project_member(
-            db=db,
-            project_id=payload.project_id,
-            user_id=user.id,
-        )
-        if not is_member:
-            raise HTTPException(status_code=403, detail="프로젝트 접근 권한이 없습니다.")
-
-        node = crud.get_file_node(db, payload.file_uid)
-
-        if not node:
-            raise HTTPException(status_code=404, detail="노드를 찾을 수 없습니다.")
-
-        if node.node_type == crud.models.NodeType.FILE:
-            cleanup_editing_users()  # 삭제 시에만 정리
-            if has_other_active_editor(node.uid, user.nickname):
-                return{
-                    "success": False,
-                    "message": "해당 파일에서 다른 사용자가 수정 중입니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
-                    "editing_users": get_active_editors(node.uid),
-                }
-
-        crud.delete_file_data(node.file_path)
-        crud.delete_node(db, node)
-
-        crud.create_project_log(
-            db=db,
-            project_id=payload.project_id,
-            nickname=user.nickname,
-            action="NODE_DELETE",
-            message=f"{user.nickname}님이 파일 '{node.display_name}'을 삭제했습니다.",
-            target_node_id=node.uid
-        )
-
-        return {
-            "success": True,
-            "message": "파일이 삭제되었습니다.",
-        }
-
-    finally:
-        db.close()
-
-#디렉토리 삭제
-@app.post("/request_directory_delete")
-def request_directory_delete(payload: schemas.RequestDirectoryDelete, authorization: str | None = Header(None)):
     token_str = token_module.get_token_from_header(authorization)
     token_payload = token_module.verify_access_token(token_str)
     token_user_id = token_payload.get("id")
@@ -1141,40 +1084,67 @@ def request_directory_delete(payload: schemas.RequestDirectoryDelete, authorizat
         node = crud.get_file_node(db, payload.node_uid)
 
         if not node:
-            raise HTTPException(status_code=404, detail="노드를 찾을 수 없습니다.")
+            raise HTTPException(status_code=404, detail="삭제 대상을 찾을 수 없습니다.")
 
-        if node.node_type != crud.models.NodeType.DIRECTORY:
-            raise HTTPException(status_code=400, detail="노드가 디렉토리가 아닙니다.")
-
-        # 디렉토리 내 모든 파일에 대해 편집 중인 사용자가 있는지 확인
-        descendant_file_nodes = crud.get_descendant_file_nodes(db, node.uid)
-        cleanup_editing_users()  # 삭제 시에만 정리
-        for file in descendant_file_nodes:
-            if has_other_active_editor(file.uid, user.nickname):
-                return {
+        if node.node_type == crud.models.NodeType.FILE:
+            cleanup_editing_users()  # 삭제 시 현재 작업 중인 사용자 정보 최신화
+            active_editors = get_active_editors(node.uid)
+            if active_editors:
+                return{
                     "success": False,
-                    "message": f"디렉토리 내 파일 '{file.display_name}'에서 다른 사용자가 수정 중입니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
-                    "editing_users": get_active_editors(file.uid),
+                    "message": "해당 파일에서 수정 중인 사용자가 있습니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
+                    "editing_users": active_editors,
                 }
+            else:
+                crud.delete_file_data(node.file_path)
+                crud.create_project_log(
+                    db=db,
+                    project_id=payload.project_id,
+                    nickname=user.nickname,
+                    action="NODE_DELETE",
+                    message=f" {user.nickname}님이 파일 '{node.display_name}'을 삭제했습니다.",
+                    target_node_id=node.uid
+                    )
+                crud.delete_node(db, node)
+                return {
+                    "success": True,
+                    "message": "파일이 삭제되었습니다.",
+                    }
 
-        for file in descendant_file_nodes:
-            crud.delete_file_data(file.file_path)
-        crud.delete_node(db, node)
+        else:
+            # 디렉토리 내 모든 파일에 대해 편집 중인 사용자가 있는지 확인
+            descendant_file_nodes = crud.get_descendant_file_nodes(db, node.uid)
+            cleanup_editing_users()  # 삭제 시에만 정리
+            for file in descendant_file_nodes:
+                active_editors = get_active_editors(file.uid)
+                if active_editors:
+                    return {
+                        "success": False,
+                        "message": f"디렉토리 내 파일 '{file.display_name}'에서 수정 중인 사용자가 있습니다. 모든 사용자가 편집을 종료한 후 다시 시도해주세요.",
+                        "editing_users": active_editors,
+                    }
 
-        crud.create_project_log(
-            db=db,
-            project_id=payload.project_id,
-            nickname=user.nickname,
-            action="NODE_DELETE",
-            message=f"{user.nickname}님이 디렉토리 '{node.display_name}'을 삭제했습니다.",
-            target_node_id=node.uid
-        )
+            decendant_files = ""
+            for file in descendant_file_nodes:
+                crud.delete_file_data(file.file_path)
+                decendant_files += f" - {file.display_name} "
 
-        return {
-            "success": True,
-            "message": "디렉토리가 삭제되었습니다.",
-        }
+            crud.create_project_log(
+                db=db,
+                project_id=payload.project_id,
+                nickname=user.nickname,
+                action="NODE_DELETE",
+                message=f" {user.nickname}님이 디렉토리 '{node.display_name}'을 삭제했습니다. \n 삭제된 하위 파일: {decendant_files if decendant_files else '없음'}",
+                target_node_id=node.uid
+            )
+            crud.delete_node(db, node) # 상위 디렉토리 노드만 삭제해도 하위 노드들도 cascade로 삭제됨
 
+
+
+            return {
+                "success": True,
+                "message": "디렉토리가 삭제되었습니다.",
+            }
     finally:
         db.close()
 

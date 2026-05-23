@@ -58,7 +58,7 @@ class RequestDirectoryCreate(BaseModel):
 
 class RequestFileDelete(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")
-    file_uid: str = Field(..., description="파일 고유 ID")
+    node_uid: str = Field(..., description="파일 고유 ID")
 
 class RequestDirectoryDelete(BaseModel):
     project_id: str = Field(..., description="프로젝트 고유 ID")

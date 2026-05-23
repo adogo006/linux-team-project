@@ -1107,7 +1107,7 @@ function openNodeCtx(e, nodeId, nodeType) {
   menu.id = "ctx-menu";
   menu.innerHTML = `
     <div class="ctx-item" onclick="renameNode('${nodeId}', '${nodeType}'); closeCtxMenu()">✏ 이름 변경</div>
-    <div class="ctx-item danger" onclick="${deleteHandler}; closeCtxMenu()">🗑 삭제</div>`;
+    <div class="ctx-item danger" onclick="deleteNode('${nodeId}'); closeCtxMenu()">🗑 삭제</div>`;
 
   const { x, y } = calcMenuPos(e, 180, 80);
   menu.style.top = y + "px";
@@ -1224,10 +1224,12 @@ async function renameNode(nodeId, nodeType) {
   }
 }
 
-async function deleteNode(nodeId, nodeType) {
+async function deleteNode(nodeId) {
   const token = sessionStorage.getItem("access_token");
   const node = fileNodeMap[nodeId];
   if (!node) return;
+
+  const nodeType = node.type;
 
   const confirmText = nodeType === "folder"
     ? `폴더 "${node.name}"와 하위 항목을 삭제하려면 확인을 누르세요.`
@@ -1240,21 +1242,14 @@ async function deleteNode(nodeId, nodeType) {
   });
   if (!result.confirmed) return;
 
-  const endpoint = nodeType === "folder"
-    ? "/api/request_directory_delete"
-    : "/api/request_file_delete";
-  const payload = nodeType === "folder"
-    ? { project_id: projectInfo.id, node_uid: nodeId }
-    : { project_id: projectInfo.id, file_uid: nodeId };
-
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetch("/api/request_node_delete", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ project_id: projectInfo.id, node_uid: nodeId }),
     });
     const data = await res.json();
     if (!data.success) {
