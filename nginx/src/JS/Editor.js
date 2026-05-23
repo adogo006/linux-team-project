@@ -928,7 +928,10 @@ function toggleProjectLogPanel() {
     // scroll to bottom so latest logs visible
     requestAnimationFrame(() => scrollProjectLogsToBottom(true));
     const toggle = document.getElementById("project-log-toggle");
-    if (toggle) toggle.setAttribute("aria-expanded", "true");
+    if (toggle) {
+      toggle.textContent = "▾";
+      toggle.setAttribute("aria-expanded", "true");
+    }
   } else {
     applyProjectLogPanelState(true);
     const toggle = document.getElementById("project-log-toggle");
