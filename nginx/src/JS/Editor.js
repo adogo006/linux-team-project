@@ -782,7 +782,7 @@ function renderProjectLogs(animateScroll = false) {
 
   countBadge.textContent = `${projectLogCount}개`;
 
-  const logs = [...editLogs].reverse();
+  const logs = [...editLogs];
   const previousCount = lastRenderedProjectLogCount;
   const countChanged = projectLogCount !== previousCount;
 
@@ -840,6 +840,15 @@ function scrollProjectLogsToBottom(animate = true) {
   });
 }
 
+function updateProjectLogToggleUI(collapsed) {
+  const toggle = document.getElementById("project-log-toggle");
+  if (!toggle) return;
+
+  toggle.textContent = collapsed ? "▴" : "▾";
+  toggle.title = collapsed ? "로그 펼치기" : "로그 접기";
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+}
+
 function applyProjectLogPanelState(collapsed, persist = true) {
   isProjectLogCollapsed = !!collapsed;
   if (persist) {
@@ -847,13 +856,8 @@ function applyProjectLogPanelState(collapsed, persist = true) {
   }
 
   const panel = document.getElementById("project-log-panel");
-  const toggle = document.getElementById("project-log-toggle");
   if (panel) panel.classList.toggle("collapsed", isProjectLogCollapsed);
-  if (toggle) {
-    toggle.textContent = isProjectLogCollapsed ? "▴" : "▾";
-    toggle.title = isProjectLogCollapsed ? "로그 펼치기" : "로그 접기";
-    toggle.setAttribute("aria-expanded", String(!isProjectLogCollapsed));
-  }
+  updateProjectLogToggleUI(isProjectLogCollapsed);
   // reset inline height so CSS var controls take effect when toggling manually
   if (panel) {
     // when toggling state via this function, ensure panel is visible
@@ -900,8 +904,7 @@ function hideProjectLog() {
   lastAppliedLogHeight = null;
   isProjectLogVisible = false;
   // update toggle button aria/state
-  const toggle = document.getElementById("project-log-toggle");
-  if (toggle) toggle.setAttribute("aria-expanded", "false");
+  updateProjectLogToggleUI(true);
 }
 
 function toggleProjectLogPanel() {
@@ -927,14 +930,9 @@ function toggleProjectLogPanel() {
     lastAppliedLogHeight = h;
     // scroll to bottom so latest logs visible
     requestAnimationFrame(() => scrollProjectLogsToBottom(true));
-    const toggle = document.getElementById("project-log-toggle");
-    if (toggle) {
-      toggle.textContent = "▾";
-      toggle.setAttribute("aria-expanded", "true");
-    }
+    updateProjectLogToggleUI(false);
   } else {
     applyProjectLogPanelState(true);
-    const toggle = document.getElementById("project-log-toggle");
   }
 }
 
@@ -1034,8 +1032,18 @@ async function addFile(parentId) {
 
 async function addFolder(parentId) {
   const token = sessionStorage.getItem("access_token");
-  const name = prompt("폴더 이름을 입력하세요");
-  if (!name?.trim()) return;
+  const result = await openActionModal({
+    title: "폴더 추가",
+    description: "생성할 폴더 이름을 입력하세요.",
+    mode: "input",
+    inputLabel: "폴더 이름",
+    inputPlaceholder: "예: utils",
+    confirmText: "생성",
+  });
+  if (!result.confirmed) return;
+
+  const name = result.value;
+  if (!name) return;
 
   try {
     const res = await fetch(`/api/request_directory_create`, {

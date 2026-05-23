@@ -35,7 +35,7 @@ class User(Base):
     id = Column(String(20), unique=True, index=True, nullable=False) # 로그인 아이디 (schemas.RequestRegister.id)
     password = Column(String, nullable=False)
     nickname = Column(String(12), unique=True, index=True, nullable=False) # 닉네임 (schemas.RequestRegister.nick_name)
-    created_at = Column(DateTime, default=datetime.datetime.now(KST)) # 계정 생성 시간
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.now(KST)) # 계정 생성 시간
 
     # 역참조
     owned_projects = relationship("Project", back_populates="creator")
@@ -51,7 +51,7 @@ class Project(Base):
     uid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True) # project_id
     name = Column(String(30), nullable=False)                                # project_name
     creator_id = Column(String, ForeignKey("users.id"), nullable=False)      # 생성자
-    created_at = Column(DateTime, default=datetime.datetime.now(KST))              # 생성 시간
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.now(KST))              # 생성 시간
 
     # 역참조
     creator = relationship("User", back_populates="owned_projects")
@@ -69,7 +69,7 @@ class ProjectMember(Base):
     uid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     project_uid = Column(UUID(as_uuid=True), ForeignKey("projects.uid", ondelete="CASCADE"), nullable=False)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    joined_at = Column(DateTime, default=datetime.datetime.now(KST))
+    joined_at = Column(DateTime(timezone=True), default=datetime.datetime.now(KST))
 
     project = relationship("Project", back_populates="members")
     user = relationship("User", back_populates="memberships")
@@ -88,8 +88,8 @@ class FileNode(Base):
     node_type = Column(Enum(NodeType), nullable=False) # file or directory
     file_path = Column(String, nullable=True) # 파일 경로 (인덱스 포인터)
 
-    created_at = Column(DateTime, default=datetime.datetime.now(KST))
-    updated_at = Column(DateTime, default=datetime.datetime.now(KST), onupdate=datetime.datetime.now(KST))
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.now(KST))
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.now(KST), onupdate=datetime.datetime.now(KST))
 
     project = relationship("Project", back_populates="nodes")
     parent = relationship("FileNode", remote_side=[uid], back_populates="children")
@@ -116,8 +116,8 @@ class ProjectLog(Base):
     action_type = Column(String, nullable=False)                  # 생성, 수정, 삭제 등
     message = Column(Text, nullable=False)                        # log_message
     
-    start_time = Column(DateTime, nullable=True)                  # 수정 시작 시간
-    end_time = Column(DateTime, default=datetime.datetime.now(KST)) # 수정 완료 시간
+    start_time = Column(DateTime(timezone=True), nullable=True)                  # 수정 시작 시간
+    end_time = Column(DateTime(timezone=True), default=datetime.datetime.now(KST)) # 수정 완료 시간
 
     project = relationship("Project", back_populates="logs")
     user = relationship("User", back_populates="logs")
@@ -133,7 +133,7 @@ class InviteRequest(Base):
     inviter_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True) # 초대한 사람
     invitee_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True) # 초대받는 사람
 
-    created_at = Column(DateTime, default=datetime.datetime.now(KST))
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.now(KST))
 
     project = relationship("Project")
     inviter = relationship("User", foreign_keys=[inviter_id])
