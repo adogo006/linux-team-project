@@ -8,6 +8,24 @@
     <link rel="stylesheet" href="css/register.css" />
   </head>
   <body>
+    <!-- FOUC 방지 -->
+    <script>
+      if (localStorage.getItem("theme") === "light")
+        document.body.classList.add("light");
+    </script>
+
+    <!-- 테마 토글 (우측 상단 fixed) -->
+    <button
+      class="theme-toggle theme-toggle-fixed"
+      onclick="toggleTheme()"
+      title="테마 전환"
+    >
+      <div class="theme-toggle-inner">
+        <span class="theme-dot dark-dot"></span>
+        <span class="theme-dot light-dot"></span>
+      </div>
+    </button>
+
     <div class="card">
       <div class="corner"></div>
       <div class="logo">CodeSync</div>
@@ -101,6 +119,7 @@
       <span class="back-link" onclick="goLogin()">로그인으로 돌아가기</span>
     </div>
 
+    <script src="js/theme.js"></script>
     <script src="js/register.js"></script>
   </body>
 </html>

@@ -23,6 +23,18 @@
   --font-body: "Pretendard", sans-serif;
 }
 
+/* ── 라이트 테마 ── */
+body.light {
+  --bg: #f0f2f7;
+  --surface: #ffffff;
+  --surface2: #e8eaf0;
+  --surface3: #dde0ea;
+  --border: #c8cdd8;
+  --text: #1a1d26;
+  --text-muted: #6b7280;
+  --text-dim: #a0a8b8;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -69,4 +81,67 @@ body::before {
 }
 .status.success {
   color: var(--green);
+}
+
+/* ── 테마 토글 버튼 ── */
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.theme-toggle:hover {
+  border-color: var(--text-muted);
+  background: var(--surface3);
+}
+
+/* 버튼 안 두 원 */
+.theme-toggle-inner {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.theme-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transition: opacity 0.15s;
+}
+.theme-dot.dark-dot {
+  background: #1a1d26;
+  border: 1px solid var(--border);
+}
+.theme-dot.light-dot {
+  background: #f0f2f7;
+  border: 1px solid var(--border);
+}
+
+/* 현재 테마 원은 링 강조, 나머지는 흐리게 */
+body:not(.light) .theme-dot.dark-dot {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 1px;
+}
+body.light .theme-dot.light-dot {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 1px;
+}
+
+/* 로그인/회원가입 페이지용 — 우측 상단 fixed */
+.theme-toggle-fixed {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 999;
+  height: 32px;
+  width: 32px;
 }

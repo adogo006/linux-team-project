@@ -8,6 +8,12 @@
     <link rel="stylesheet" href="css/project.css" />
   </head>
   <body>
+    <!-- FOUC 방지 -->
+    <script>
+      if (localStorage.getItem("theme") === "light")
+        document.body.classList.add("light");
+    </script>
+
     <!-- 상단 네비게이션 -->
     <nav>
       <div class="nav-logo">CodeSync</div>
@@ -15,6 +21,13 @@
         <div class="nav-avatar" id="nav-avatar"></div>
         <span id="nav-username">username</span>
         <button class="nav-logout" onclick="handleLogout()">로그아웃</button>
+        <!-- 테마 토글: 로그아웃 오른쪽 -->
+        <button class="theme-toggle" onclick="toggleTheme()" title="테마 전환">
+          <div class="theme-toggle-inner">
+            <span class="theme-dot dark-dot"></span>
+            <span class="theme-dot light-dot"></span>
+          </div>
+        </button>
       </div>
     </nav>
 
@@ -77,6 +90,7 @@
       </div>
     </div>
 
+    <script src="js/theme.js"></script>
     <script src="js/project.js"></script>
   </body>
 </html>

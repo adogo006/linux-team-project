@@ -8,6 +8,12 @@
     <link rel="stylesheet" href="css/editor.css" />
   </head>
   <body>
+    <!-- FOUC 방지 -->
+    <script>
+      if (localStorage.getItem("theme") === "light")
+        document.body.classList.add("light");
+    </script>
+
     <!-- 상단 네비게이션 -->
     <nav class="editor-nav">
       <div class="nav-logo">CodeSync</div>
@@ -21,6 +27,13 @@
         프로젝트 목록
       </button>
       <button class="nav-logout" onclick="handleLogout()">로그아웃</button>
+      <!-- 테마 토글: 로그아웃 오른쪽 -->
+      <button class="theme-toggle" onclick="toggleTheme()" title="테마 전환">
+        <div class="theme-toggle-inner">
+          <span class="theme-dot dark-dot"></span>
+          <span class="theme-dot light-dot"></span>
+        </div>
+      </button>
     </nav>
 
     <!-- 3단 레이아웃 -->
@@ -65,8 +78,14 @@
           </div>
           <div class="project-log-content" id="project-log-content"></div>
         </div>
-        <!-- persistent handle to reopen log panel when hidden -->
-        <button class="project-log-handle" id="project-log-handle" onclick="toggleProjectLogPanel()" aria-label="로그 열기">▴</button>
+        <button
+          class="project-log-handle"
+          id="project-log-handle"
+          onclick="toggleProjectLogPanel()"
+          aria-label="로그 열기"
+        >
+          ▴
+        </button>
       </section>
 
       <!-- 오른쪽: 사용자 목록 -->
@@ -82,7 +101,11 @@
           <button class="btn-invite" onclick="openInviteModal()">
             + 사용자 초대
           </button>
-          <button class="btn-danger" id="btn-project-delete" onclick="openDeleteModal()">
+          <button
+            class="btn-danger"
+            id="btn-project-delete"
+            onclick="openDeleteModal()"
+          >
             ⚠ 프로젝트 삭제
           </button>
         </div>
@@ -127,7 +150,7 @@
       </div>
     </div>
 
-    <!-- 공통 작업 모달 (이름 변경/삭제 확인/알림) -->
+    <!-- 공통 작업 모달 -->
     <div
       class="invite-modal-overlay"
       id="action-overlay"
@@ -149,10 +172,18 @@
         <div class="invite-hint info" id="action-hint"></div>
 
         <div class="invite-modal-actions">
-          <button class="btn-cancel-modal" id="btn-action-cancel" onclick="closeActionModal(false)">
+          <button
+            class="btn-cancel-modal"
+            id="btn-action-cancel"
+            onclick="closeActionModal(false)"
+          >
             취소
           </button>
-          <button class="btn-invite-send" id="btn-action-confirm" onclick="confirmActionModal()">
+          <button
+            class="btn-invite-send"
+            id="btn-action-confirm"
+            onclick="confirmActionModal()"
+          >
             확인
           </button>
         </div>
@@ -196,6 +227,7 @@
       </div>
     </div>
 
+    <script src="js/theme.js"></script>
     <script src="js/editor.js"></script>
   </body>
 </html>
