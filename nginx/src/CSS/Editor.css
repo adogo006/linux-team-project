@@ -256,7 +256,7 @@ body {
 
 /* 사용자 컨텍스트 메뉴 (팀장·장 전용) */
 .user-menu-btn {
-  opacity: 0;
+  opacity: 1;
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -265,12 +265,8 @@ body {
   padding: 2px 4px;
   border-radius: 3px;
   transition:
-    opacity 0.1s,
     background 0.1s;
   line-height: 1;
-}
-.user-item:hover .user-menu-btn {
-  opacity: 1;
 }
 .user-menu-btn:hover {
   background: var(--surface2);
@@ -542,7 +538,7 @@ body {
 
 /* 프로젝트 로그 하단 패널 */
 .project-log-panel {
-  --log-collapsed-h: 44px;
+  --log-collapsed-h: 156px;
   --log-expanded-h: 260px;
   height: var(--log-expanded-h);
   max-height: var(--log-expanded-h);
@@ -671,9 +667,9 @@ body {
   box-sizing: border-box;
 }
 .project-log-panel.collapsed .project-log-content {
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
 }
 .project-log-content::-webkit-scrollbar {
   width: 4px;

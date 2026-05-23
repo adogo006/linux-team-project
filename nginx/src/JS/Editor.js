@@ -11,7 +11,7 @@ let editLogs = []; // 서버에서 받아온 프로젝트 로그
 let projectLogCount = 0;
 let lastRenderedProjectLogCount = -1;
 let isProjectLogCollapsed = sessionStorage.getItem("project-log-collapsed") === "1";
-const PROJECT_LOG_COLLAPSED_H = 44; // px
+const PROJECT_LOG_COLLAPSED_H = 156; // px
 const PROJECT_LOG_EXPANDED_H = 260; // px when auto-expanded by scroll
 let projectLogScrollHandlerAttached = false;
 let lastAppliedLogHeight = null;
@@ -204,7 +204,7 @@ async function loadProject(token, projectId) {
   renderUsers();
   renderFileTree();
   renderProjectLogs(true);
-  applyProjectLogPanelState(isProjectLogCollapsed, false);
+  applyProjectLogPanelState(true, false);
   showEmpty();
 }
 
@@ -525,7 +525,7 @@ function renderToolbar() {
   const logCount = projectLogCount;
 
   const logBtn = `
-    <button class="btn-log" onclick="openLogPanel()" title="프로젝트 로그">
+    <button class="btn-log" onclick="toggleProjectLogPanel()" title="프로젝트 로그">
       📋 수정 로그${logCount > 0 ? ` <span class="log-count">${logCount}</span>` : ""}
     </button>`;
 
@@ -783,6 +783,9 @@ function renderProjectLogs(animateScroll = false) {
   countBadge.textContent = `${projectLogCount}개`;
 
   const logs = [...editLogs].reverse();
+  const previousCount = lastRenderedProjectLogCount;
+  const countChanged = projectLogCount !== previousCount;
+
   if (logs.length === 0) {
     content.innerHTML = `<div class="log-empty">아직 프로젝트 로그가 없습니다.</div>`;
     lastRenderedProjectLogCount = projectLogCount;
@@ -811,21 +814,12 @@ function renderProjectLogs(animateScroll = false) {
     )
     .join("");
 
-  if (!isProjectLogCollapsed && animateScroll && projectLogCount !== lastRenderedProjectLogCount) {
-    requestAnimationFrame(() => {
-      content.scrollTo({
-        top: content.scrollHeight,
-        behavior: "smooth",
-      });
-    });
-  }
-
   lastRenderedProjectLogCount = projectLogCount;
 
-  // auto-scroll to bottom when logs change and panel is visible
-  if (isProjectLogVisible && animateScroll && projectLogCount !== lastRenderedProjectLogCount) {
+  // logs change 시에는 축소/확장 상태와 관계없이 항상 최신 로그로 이동
+  if (isProjectLogVisible && animateScroll && countChanged) {
     requestAnimationFrame(() => {
-      content.scrollTo({ top: content.scrollHeight, behavior: "smooth" });
+      scrollProjectLogsToBottom(true);
     });
   }
 }
@@ -875,6 +869,8 @@ function applyProjectLogPanelState(collapsed, persist = true) {
       lastAppliedLogHeight = null;
     }
   }
+
+  isProjectLogVisible = true;
 }
 
 function showProjectLogBase() {
@@ -911,7 +907,13 @@ function hideProjectLog() {
 function toggleProjectLogPanel() {
   const panel = document.getElementById("project-log-panel");
   if (!panel) return;
-  if (!isProjectLogVisible) {
+
+  if (panel.classList.contains("hidden")) {
+    applyProjectLogPanelState(true);
+    return;
+  }
+
+  if (isProjectLogCollapsed) {
     // open to editor's height
     const editorArea = document.getElementById("code-area");
     const h = editorArea ? editorArea.clientHeight : PROJECT_LOG_EXPANDED_H;
@@ -919,6 +921,8 @@ function toggleProjectLogPanel() {
     panel.classList.remove("collapsed");
     panel.style.height = h + "px";
     panel.style.maxHeight = h + "px";
+    isProjectLogCollapsed = false;
+    sessionStorage.setItem("project-log-collapsed", "0");
     isProjectLogVisible = true;
     lastAppliedLogHeight = h;
     // scroll to bottom so latest logs visible
@@ -926,21 +930,21 @@ function toggleProjectLogPanel() {
     const toggle = document.getElementById("project-log-toggle");
     if (toggle) toggle.setAttribute("aria-expanded", "true");
   } else {
-    hideProjectLog();
+    applyProjectLogPanelState(true);
+    const toggle = document.getElementById("project-log-toggle");
   }
 }
 
 function openLogPanel() {
+  jumpToLatestLogs();
+}
+
+function jumpToLatestLogs() {
   const panel = document.getElementById("project-log-panel");
   if (!panel) return;
-  const editorArea = document.getElementById("code-area");
-  const h = editorArea ? editorArea.clientHeight : PROJECT_LOG_EXPANDED_H;
-  panel.classList.remove("hidden");
-  panel.classList.remove("collapsed");
-  panel.style.height = h + "px";
-  panel.style.maxHeight = h + "px";
-  isProjectLogVisible = true;
-  lastAppliedLogHeight = h;
+  if (panel.classList.contains("hidden")) {
+    applyProjectLogPanelState(true);
+  }
   requestAnimationFrame(() => scrollProjectLogsToBottom(true));
 }
 
