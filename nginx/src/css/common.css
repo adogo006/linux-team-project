@@ -1,0 +1,147 @@
+/* ── common.css — CodeSync 공통 스타일 ── */
+
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Pretendard:wght@300;400;500;600;700&display=swap");
+
+:root {
+  --bg: #0d0f14;
+  --surface: #161920;
+  --surface2: #1e2229;
+  --surface3: #252b35;
+  --border: #2a2f3a;
+  --text: #e8eaf0;
+  --text-muted: #6b7280;
+  --text-dim: #3d4450;
+  --green: #22c55e;
+  --green-dark: #16a34a;
+  --blue: #3b82f6;
+  --blue-dark: #2563eb;
+  --orange: #f97316;
+  --orange-dark: #ea6c0a;
+  --red: #f87171;
+  --yellow: #facc15;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-body: "Pretendard", sans-serif;
+}
+
+/* ── 라이트 테마 ── */
+body.light {
+  --bg: #f0f2f7;
+  --surface: #ffffff;
+  --surface2: #e8eaf0;
+  --surface3: #dde0ea;
+  --border: #c8cdd8;
+  --text: #1a1d26;
+  --text-muted: #6b7280;
+  --text-dim: #a0a8b8;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 격자 배경 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 카드 진입 애니메이션 */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 상태 메시지 (로그인·회원가입 공용) */
+.status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  min-height: 16px;
+  text-align: center;
+}
+.status.error {
+  color: var(--red);
+}
+.status.success {
+  color: var(--green);
+}
+
+/* ── 테마 토글 버튼 ── */
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.theme-toggle:hover {
+  border-color: var(--text-muted);
+  background: var(--surface3);
+}
+
+/* 버튼 안 두 원 */
+.theme-toggle-inner {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.theme-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transition: opacity 0.15s;
+}
+.theme-dot.dark-dot {
+  background: #1a1d26;
+  border: 1px solid var(--border);
+}
+.theme-dot.light-dot {
+  background: #f0f2f7;
+  border: 1px solid var(--border);
+}
+
+/* 현재 테마 원은 링 강조, 나머지는 흐리게 */
+body:not(.light) .theme-dot.dark-dot {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 1px;
+}
+body.light .theme-dot.light-dot {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 1px;
+}
+
+/* 로그인/회원가입 페이지용 — 우측 상단 fixed */
+.theme-toggle-fixed {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 999;
+  height: 32px;
+  width: 32px;
+}
