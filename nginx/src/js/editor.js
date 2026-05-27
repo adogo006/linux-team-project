@@ -782,7 +782,7 @@ function renderProjectLogs(animateScroll = false) {
 
   countBadge.textContent = `${projectLogCount}개`;
 
-  const logs = [...editLogs];
+  const logs = [...editLogs].reverse();
   const previousCount = lastRenderedProjectLogCount;
   const countChanged = projectLogCount !== previousCount;
 
