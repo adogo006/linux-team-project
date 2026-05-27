@@ -1,0 +1,283 @@
+/* ── register.css ── */
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  overflow-x: hidden;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 60% 60% at 50% 50%,
+    rgba(59, 130, 246, 0.05) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 40px 36px 36px;
+  width: 420px;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  animation: fadeUp 0.5s ease both;
+  z-index: 1;
+}
+
+.logo {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blue);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.logo::before {
+  content: "> ";
+  opacity: 0.6;
+}
+
+h1 {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 28px;
+}
+h1 span {
+  color: var(--blue);
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 24px;
+}
+
+/* 섹션 구분선 */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.section-label:first-of-type {
+  margin-top: 0;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+}
+
+/* 인풋 + 중복확인 버튼 행 */
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+.input-row input {
+  flex: 1;
+}
+
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 11px 14px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+input.valid {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08);
+}
+input.invalid {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.08);
+}
+input::placeholder {
+  color: var(--text-muted);
+}
+
+/* 중복 확인 버튼 */
+.btn-check {
+  flex-shrink: 0;
+  padding: 0 14px;
+  height: 42px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-check:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-check.active {
+  border-color: var(--blue);
+  color: var(--blue);
+  cursor: pointer;
+  opacity: 1;
+}
+.btn-check.active:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+/* 중복확인 통과 — 파란색 체크 테두리 */
+.btn-check.confirmed {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: rgba(59, 130, 246, 0.08);
+  cursor: default;
+  opacity: 1;
+}
+
+/* 인라인 힌트 */
+.hint {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  margin-top: 5px;
+  min-height: 14px;
+  padding-left: 2px;
+  transition: color 0.2s;
+}
+.hint.ok {
+  color: var(--green);
+}
+.hint.fail {
+  color: var(--red);
+}
+.hint.info {
+  color: var(--text-muted);
+}
+
+/* 비밀번호 일치 바 */
+.pw-match {
+  height: 3px;
+  border-radius: 2px;
+  margin-top: 6px;
+  background: var(--border);
+  overflow: hidden;
+}
+.pw-match-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  transition:
+    width 0.3s,
+    background 0.3s;
+}
+
+/* 가입 완료 버튼 */
+.btn-submit {
+  width: 100%;
+  height: 48px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  margin-top: 24px;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.25);
+  transition:
+    filter 0.15s,
+    transform 0.1s;
+  letter-spacing: 0.01em;
+}
+.btn-submit:hover {
+  filter: brightness(1.1);
+}
+.btn-submit:active {
+  transform: scale(0.98);
+}
+.btn-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* 로그인으로 돌아가기 */
+.back-link {
+  display: block;
+  text-align: center;
+  margin-top: 16px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.back-link:hover {
+  color: var(--blue);
+}
+.back-link::before {
+  content: "← ";
+}
+
+.corner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 60px;
+  height: 60px;
+  border-top: 2px solid var(--blue);
+  border-right: 2px solid var(--blue);
+  border-radius: 0 12px 0 0;
+  opacity: 0.4;
+}
