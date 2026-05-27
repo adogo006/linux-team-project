@@ -20,7 +20,8 @@ services:
       - .env
     volumes:
       - ./user_uploads:/user_uploads
-    # environment:
+    environment:
+      - PYTHONPATH=/fastapi         # 중요! /fastapi를 탐색 경로에 추가
     #   - DB_INIT_RETRIES=30
     #   - DB_INIT_DELAY=2
     command: >
