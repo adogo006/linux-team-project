@@ -1,5 +1,0 @@
-fastapi            # api 해석 라이브러리
-uvicorn[standard]  # FastAPI를 실행해주는 서버 엔진
-httpx              # 다른 컨테이너에 비동기 요청을 위한 라이브러리
-
-# 여기에 필요한 라이브러리 추가
