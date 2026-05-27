@@ -782,7 +782,7 @@ function renderProjectLogs(animateScroll = false) {
 
   countBadge.textContent = `${projectLogCount}개`;
 
-  const logs = [...editLogs].reverse(); 
+  const logs = [...editLogs].reverse(); // 최신 로그가 아래로 오도록 순서 뒤집기
   const previousCount = lastRenderedProjectLogCount;
   const countChanged = projectLogCount !== previousCount;
 
