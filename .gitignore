@@ -16,7 +16,7 @@ venv/
 프로젝트.md
 
 # 데이터 파일
-# user_uploads/
+user_uploads/
 
 *.sql
 
